@@ -1,0 +1,6 @@
+#!/bin/bash
+if [[ "$1" == "0" ]]; then
+   set -- $((RANDOM + 20000)) "${@:2}"
+fi
+
+docker run --rm -p $1:$1 -v /Users/iami/Programming/mycard/ygopro-database/locales/zh-CN/cards.cdb:/ygopro-server/ygopro/cards.cdb -w /ygopro-server/ygopro srvpro /ygopro-server/ygopro/ygopro $@

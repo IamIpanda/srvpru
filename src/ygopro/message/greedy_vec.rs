@@ -8,7 +8,7 @@ trait GreedyVec<'a, const N: usize>: Sized {
 }
 
 macro_rules! greedy_vec {
-    ($($max_length:expr,)+) => {
+    ($($max_length:expr),+) => {
         $(
             impl<'a, T> GreedyVec<'a, $max_length> for Vec<T> where T: Default + Copy + Serialize + Deserialize<'a> {
                 fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
@@ -19,8 +19,7 @@ macro_rules! greedy_vec {
                     seq.end()
                 }
 
-                fn deserialize<D>(deserializer: D) -> Result<Vec<T>, D::Error> where D: Deserializer<'a>
-                {
+                fn deserialize<D>(deserializer: D) -> Result<Vec<T>, D::Error> where D: Deserializer<'a> {
                     struct ArrayVisitor<T> { element: PhantomData<T> }
 
                     impl<'a, T> Visitor<'a> for ArrayVisitor<T> where T: Default + Copy + Deserialize<'a>

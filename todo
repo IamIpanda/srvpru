@@ -1,0 +1,13 @@
+Reline on drop
+GameMsg deserialize
+Move telescreen to Player, telescreen user can send message
+Send message to room
+Chat sensitive words
+Report result
+Timeout
+
+-> dependecy!
+Heartbeat
+MC Login
+Report deck
+Dockerfile

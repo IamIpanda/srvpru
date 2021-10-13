@@ -1,10 +1,17 @@
+#![allow(dead_code)]
+use serde_repr::Serialize_repr;
+use serde_repr::Deserialize_repr;
+use num_enum::IntoPrimitive;
+use num_enum::TryFromPrimitive;
+
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum Network {
     ServerId = 29736,
     ClientId = 57078,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
+#[repr(u8)]
 pub enum Netplayer {
     Player1 = 0,
     Player2 = 1,
@@ -15,7 +22,8 @@ pub enum Netplayer {
     Observer = 7,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
+#[repr(u8)]
 pub enum PlayerChange {
     Observe = 8,
     Ready = 9,
@@ -31,15 +39,49 @@ pub enum ErrorMessage {
     Vererror = 4,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive, TryFromPrimitive, Hash, Debug)]
+#[repr(u8)]
 pub enum Mode {
     Single = 0,
     Match = 1,
     Tag = 2,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
-pub enum Message {
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
+#[repr(u32)]
+pub enum Location {
+    Deck = 1,
+    Hand = 2,
+    MZone = 4,
+    SZone = 8,
+    Grave = 16,
+    Removed = 32,
+    Extra = 64,
+    Overlay = 128,
+    OnField = 12,
+    FZone = 256,
+    PZone = 512,
+    DeckBot = 65537,
+    DeckShf = 131073,
+}
+
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
+#[repr(u32)]
+pub enum Position {
+    FaceupAttack = 1,
+    FaceDownAttack = 2,
+    FaceupDefense = 4,
+    FacedownDefense = 8,
+    Faceup = 5,
+    Facedown = 10,
+    Attack = 3,
+    Defense = 12,
+    NoFlipEffect = 65536
+}
+
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Hash, Debug)]
+#[repr(u8)]
+pub enum GameMessage {
     Retry = 1,
     Hint = 2,
     Waiting = 3,
@@ -135,7 +177,10 @@ pub enum Message {
     CustomMsg = 180,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+pub type GMMessageType = GameMessage;
+
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
+#[repr(u32)]
 pub enum Timing {
     DrawPhase = 1,
     StandbyPhase = 2,
@@ -165,8 +210,9 @@ pub enum Timing {
     Equip = 33554432,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
-pub enum Types {
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
+#[repr(u32)]
+pub enum Type {
     Monster = 1,
     Spell = 2,
     Trap = 4,
@@ -194,8 +240,9 @@ pub enum Types {
     Link = 67108864,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
-pub enum Races {
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
+#[repr(u32)]
+pub enum Race {
     Warrior = 1,
     Spellcaster = 2,
     Fairy = 4,
@@ -223,8 +270,105 @@ pub enum Races {
     Cybers = 16777216,
 }
 
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
+#[repr(u32)]
+pub enum Reason {
+    Destroy = 0x1,
+    Release = 0x2,
+    Temporary = 0x4,
+    Material = 0x8,
+    Summon = 0x10,
+    Battle = 0x20,
+    Effect = 0x40,
+    Cost = 0x80,
+    Adjust = 0x100,
+    LostTarget = 0x200,
+    Rule = 0x400,
+    Spsummon = 0x800,
+    Dissummon = 0x1000,
+    Flip = 0x2000,
+    Discard = 0x4000,
+    Rdamage = 0x8000,
+    Rrecover = 0x10000,
+    Return = 0x20000,
+    Fusion = 0x40000,
+    Synchro = 0x80000,
+    Ritual = 0x100000,
+    Xyz = 0x200000,
+    Replace = 0x1000000,
+    Draw = 0x2000000,
+    Redirect = 0x4000000,
+    Reveal = 0x8000000,
+    Link = 0x10000000,
+    LostOverlay = 0x20000000
+}
+
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
+#[repr(u32)]
+pub enum Status {
+    Disabled = 0x0001,
+    ToEnable = 0x0002,
+    ToDisable = 0x0004,
+    ProcComplete = 0x0008,
+    SetTurn = 0x0010,
+    NoLevel = 0x0020,
+    BattleResult = 0x0040,
+    SpsummonStep = 0x0080,
+    FormChanged = 0x0100,
+    Summoning = 0x0200,
+    EffectEnabled = 0x0400,
+    SummonTurn = 0x0800,
+    DestroyConfirmed = 0x1000,
+    LeaveConfirmed = 0x2000,
+    BattleDestroyed = 0x4000,
+    CopyingEffect = 0x8000,
+    Chaining = 0x10000,
+    SummonDisabled = 0x20000,
+    ActivateDisabled = 0x40000,
+    EffectReplaced = 0x80000,
+    FutureFusion = 0x100000,
+    AttackCanceled = 0x200000,
+    Initializing = 0x400000,
+    Activated = 0x800000,
+    JustPos = 0x1000000,
+    ContinuousPos = 0x2000000,
+    Forbidden = 0x4000000,
+    ActFromHand = 0x8000000,
+    OppoBattle = 0x10000000,
+    FlipSummonTurn = 0x20000000,
+    SpsummonTurn = 0x40000000,
+}
+
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
+#[repr(u32)]
+pub enum Query {
+    Code = 0x1,
+    Position = 0x2,
+    Alias = 0x4,
+    Type = 0x8,
+    Level = 0x10,
+    Rank = 0x20,
+    Attribute = 0x40,
+    Race = 0x80,
+    Attack = 0x100,
+    Defense = 0x200,
+    BaseAttack = 0x400,
+    BaseDefense = 0x800,
+    Reason = 0x1000,
+    ReasonCard = 0x2000,
+    EquipCard = 0x4000,
+    TargetCard = 0x8000,
+    OverlayCard = 0x10000,
+    Counters = 0x20000,
+    Owner = 0x40000,
+    Status = 0x80000,
+    Lscale = 0x200000,
+    Rscale = 0x400000,
+    Link = 0x800000
+}
+
 #[derive(Copy, Clone, Eq, PartialEq)]
-pub enum Attributes {
+pub enum Attribute {
     Earth = 1,
     Water = 2,
     Fire = 4,
@@ -256,8 +400,10 @@ pub enum Duelstage {
     End = 5,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, IntoPrimitive)]
+#[repr(u16)]
 pub enum Colors {
+    Observer = 7,
     Lightblue = 8,
     Red = 11,
     Green = 12,
@@ -268,4 +414,35 @@ pub enum Colors {
     White = 17,
     Gray = 18,
     Darkgray = 19,
+}
+
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
+#[repr(u8)]
+pub enum Hint {
+    Event = 1,
+    Message = 2,
+    SelectMessage = 3,
+    Opselected = 4,
+    Effect = 5,
+    Race = 6,
+    Attribite = 7,
+    Code = 8,
+    Number = 9,
+    Card = 10,
+    Zone = 11,
+}
+
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
+#[repr(u32)]
+pub enum Phase {
+    Draw = 0x01,
+    Standby = 0x02,
+    Main1 = 0x04,
+    BattleStart = 0x08,
+    BattleStep = 0x10,
+    Damage = 0x20,
+    DamageCalculate = 0x40,
+    Battle = 0x80,
+    Main2 = 0x100,
+    End = 0x200
 }

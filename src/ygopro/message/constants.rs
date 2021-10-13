@@ -3,9 +3,11 @@
 // Sure, I can load it by json. 
 // But I think it's more safe to write it directly.
 use num_enum::TryFromPrimitive;
+use num_enum::IntoPrimitive;
 use std::convert::TryFrom;
+use crate::ygopro::constants::GMMessageType;
 
-#[derive(Copy, Clone, TryFromPrimitive, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, TryFromPrimitive, IntoPrimitive, Eq, PartialEq, Debug, Hash)]
 #[repr(u8)]
 pub enum CTOSMessageType {
     Response = 1,
@@ -28,7 +30,7 @@ pub enum CTOSMessageType {
     RequestField = 48
 }
 
-#[derive(Copy, Clone, TryFromPrimitive, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, TryFromPrimitive, IntoPrimitive, Eq, PartialEq, Debug, Hash)]
 #[repr(u8)]
 pub enum STOCMessageType {
     GameMessage = 1,
@@ -55,7 +57,7 @@ pub enum STOCMessageType {
     FieldFinish = 48
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Direction {
     STOC,
     CTOS,
@@ -70,8 +72,21 @@ pub fn get_message_type(direction: Direction, type_number: u8) -> Option<Message
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum MessageType {
     STOC(STOCMessageType),
+    GM(GMMessageType),
     CTOS(CTOSMessageType),
+    SRVPRU(crate::srvpru::structs::SRVPRUMessageType),
+}
+
+impl MessageType {
+    pub fn into(&self) -> u8 {
+        match self {
+            MessageType::STOC(message_type) => (*message_type).into(),
+            MessageType::GM(_) => STOCMessageType::GameMessage.into(),
+            MessageType::CTOS(message_type) => (*message_type).into(),
+            MessageType::SRVPRU(message_type) => (*message_type).into(),
+        }
+    }
 }
