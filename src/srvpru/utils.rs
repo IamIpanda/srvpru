@@ -2,45 +2,45 @@
 use std::sync::Arc;
 
 use parking_lot::Mutex;
+use srvpru::PlayerDestroy;
 use tokio::io::AsyncWriteExt;
 use tokio::net::tcp::OwnedWriteHalf;
 use anyhow::Result;
 
-use crate::ygopro::message::*;
+use crate::ygopro::Colors;
+use crate::ygopro::message::Direction;
 use crate::ygopro::message::Struct;
-use crate::ygopro::constants::Colors;
-use crate::srvpru::processor::*;
-use crate::srvpru::player::PLAYERS;
-use crate::srvpru::player::Player;
-use crate::srvpru::room::ROOMS_BY_SERVER_ADDR;
-use crate::srvpru::room::ROOMS_BY_CLIENT_ADDR;
+use crate::ygopro::message::ctos;
+use crate::ygopro::message::stoc;
+use crate::ygopro::message::srvpru;
+use crate::ygopro::message::MappedStruct;
+use crate::ygopro::message::MessageType;
+use crate::ygopro::message::generate::wrap_data;
+
 use crate::srvpru::i18n;
+use crate::srvpru::Room;
+use crate::srvpru::Player;
+use crate::srvpru::Context;
 
-use super::Room;
-use super::structs::SRVPRUMessageType;
-
+/// Send a struct to target socket.
 pub async fn send<T: Struct + MappedStruct + serde::Serialize>(socket: &mut OwnedWriteHalf, obj: &T) -> Result<()> {
-    send_data(socket, &T::message(), &(bincode::serialize(&obj)?)).await
+    send_raw_data(socket, T::message(), &(bincode::serialize(&obj)?)).await
 }
 
-pub async fn send_empty(socket: &mut OwnedWriteHalf, message_type: &MessageType) -> Result<()> {
-    send_data(socket, message_type, &[]).await
-}
-
-pub async fn send_data(socket: &mut OwnedWriteHalf, message_type: &MessageType, data: &[u8]) -> Result<()> {
+/// Send data to target socket, adding a length header and type header.
+pub async fn send_raw_data(socket: &mut OwnedWriteHalf, message_type: MessageType, data: &[u8]) -> Result<()> {
     socket.write_all(&wrap_data(message_type, data)).await?;
     Ok(())
 }
 
-pub async fn send_chat(socket: &mut OwnedWriteHalf, message: &str, region: &str, color: Colors) -> Result<()> {
-    send_chat_raw(socket, &("[Server]: ".to_string() + &i18n::render(message, region)), color).await
+/// Generate a stoc::Chat, with a [server] prefix, and translate all placeholders.
+pub fn generate_chat(message: &str, color: Colors, region: &str) -> stoc::Chat {
+    generate_raw_chat(&("[Server]: ".to_string() + &i18n::render(message, region)), color)
 }
 
-pub async fn send_chat_raw(socket: &mut OwnedWriteHalf, message: &str, color: Colors) -> Result<()> {
-    send(socket, &crate::ygopro::message::STOCChat {
-        name: color.into(),
-        msg: cast_to_c_array(&message)
-    }).await
+/// Generate a stoc::Chat, without any process.
+pub fn generate_raw_chat(message: &str, color: Colors) -> stoc::Chat {
+    stoc::Chat { name: color as u16, msg: crate::ygopro::message::string::cast_to_c_array(message) }
 }
 
 impl<'a> Context<'a> {
@@ -49,124 +49,109 @@ impl<'a> Context<'a> {
         Ok(true)
     }
 
-    pub fn cast_request_to_type<F: Struct>(&mut self) -> Option<&mut F> {
+    pub fn cast_request_to_type<T: Struct>(&self) -> Option<&T> {
+        let _box = self.request.as_ref()?;
+        _box.downcast_ref()
+    }
+
+    pub fn cast_request_to_mut_type<T: Struct>(&mut self) -> Option<&mut T> {
         let _box = self.request.as_mut()?;
-        _box.downcast_mut::<F>()
+        _box.downcast_mut()
     }
 
     pub async fn send(&mut self, obj: &(impl Struct + MappedStruct + serde::Serialize)) -> Result<()> {
-        let socket = self.socket.as_mut().ok_or(anyhow!("socket already taken."))?;
+        let socket = self.socket.as_mut().ok_or(anyhow!("Socket already taken."))?;
         send(socket, obj).await
     }
 
-    pub async fn send_empty(&mut self, message_type: &MessageType) -> Result<()> {
-        let socket = self.socket.as_mut().ok_or(anyhow!("socket already taken."))?;
-        send_empty(socket, message_type).await
+    pub async fn send_back(&mut self, obj: &(impl Struct + MappedStruct + serde::Serialize)) -> Result<()> {
+        let player = self.get_player().ok_or(anyhow!("Cannot get player"))?;
+        let mut _player = player.lock();
+        let socket_wrapper = match self.direction {
+            Direction::CTOS => _player.client_stream_writer.as_mut(),
+            Direction::STOC => _player.server_stream_writer.as_mut(),
+            Direction::SRVPRU => { return Err(anyhow!("Wrong direction.")); }
+        };
+        let socket = socket_wrapper.ok_or(anyhow!("Socket already taken."))?;
+        send(socket, obj).await
     }
 
-    pub async fn send_data(&mut self, message_type: &MessageType, data: &[u8]) -> Result<()> {
-        let socket = self.socket.as_mut().ok_or(anyhow!("socket already taken."))?;
-        send_data(socket, message_type, data).await 
+    pub async fn send_to_room(&mut self, obj: &(impl Struct + MappedStruct + serde::Serialize)) -> Result<()> {
+        let room = self.get_room().ok_or(anyhow!("Cannot find the room"))?;
+        let mut _room = room.lock();
+        _room.send(obj).await;
+        if self.direction == Direction::STOC { // STOC, a player will have socket already taken.
+            if let Some(socket) = self.socket.as_mut() {
+                send(socket, obj).await?;
+            }
+        }
+        Ok(())
     }
 
-    pub async fn send_chat(&mut self, message: &str, color: Colors) -> Result<()> {
-        let socket = self.socket.as_mut().ok_or(anyhow!("socket already taken."))?;
-        send_chat(socket, message, "zh-cn", color).await 
-    }
-
-    pub async fn send_chat_raw(&mut self, message: &str, color: Colors) -> Result<()> {
-        let socket = self.socket.as_mut().ok_or(anyhow!("socket already taken."))?;
-        send_chat_raw(socket, message, color).await 
+    pub fn get_region(&self) -> &'static str {
+        self.get_player().map(|player| player.lock().region).unwrap_or("zh-cn")
     }
 
     pub fn get_room(&self) -> Option<Arc<Mutex<Room>>> {
         match self.direction {
-            Direction::SRVPRU if self.message_type == Some(MessageType::SRVPRU(SRVPRUMessageType::RoomCreated))
-                              || self.message_type == Some(MessageType::SRVPRU(SRVPRUMessageType::RoomDestroy)) => {
-                let rooms = ROOMS_BY_SERVER_ADDR.read();
-                rooms.get(self.addr).map(|room| room.clone()) 
+            Direction::SRVPRU if self.message_type == Some(MessageType::SRVPRU(srvpru::MessageType::RoomCreated))
+                              || self.message_type == Some(MessageType::SRVPRU(srvpru::MessageType::RoomDestroy)) => {
+                Room::get_room_by_server_addr(*self.addr)
             },
-            _ => {
-                let rooms = ROOMS_BY_CLIENT_ADDR.read();
-                let room = rooms.get(self.addr).map(|room| room.clone());
-                if room.is_some() { return room; }
-
-                //if self.parameters.contains_key("room_name") { return Room::find_room_by_name(self.parameters.get("room_name").unwrap()) }
-
-                if self.message_type == Some(MessageType::CTOS(CTOSMessageType::JoinGame)) {
-                    let room_name = if let Some(request) = self.request.as_ref() {
-                        let join_game = request.downcast_ref::<CTOSJoinGame>();
-                        if join_game.is_none() { return None }
-                        join_game.unwrap().pass
-                    } else { bincode::deserialize::<CTOSJoinGame>(self.request_buffer).ok()?.pass };
-                    let room_name = crate::ygopro::message::cast_to_string(&room_name)?;
-                    let room = Room::find_room_by_name(&room_name);
-                    return room;
-                }
-                None
-            },
+            _ => Room::get_room_by_client_addr(*self.addr),
         }
+    }
+
+    pub fn get_room_in_join_game(&mut self, request: &ctos::JoinGame) -> Option<Arc<Mutex<Room>>> {
+        Room::get_room(self.get_string(&request.pass, "pass").ok()?)
     }
 
     pub fn get_player(&self) -> Option<Arc<Mutex<Player>>> {
-        let players = PLAYERS.read();
-        players.get(self.addr).map(|player| player.clone())
-    }
-
-    pub async fn send_chat_to_room(&mut self, message: &str, color: Colors) -> Result<()> {
-        let room = self.get_room().ok_or(anyhow!("Cannot find the room"))?;
-        let mut _room = room.lock();
-        _room.send_chat(message, "zh-cn", color).await?;
-        self.send_chat(message, color).await?;
-        Ok(())
-    }
-
-    pub async fn send_raw_chat_to_room(&mut self, message: &str, color: Colors) -> Result<()> {
-        let room = self.get_room().ok_or(anyhow!("Cannot find the room"))?;
-        let mut _room = room.lock();
-        _room.send_chat_raw(message, color).await?;
-        self.send_chat(message, color).await?;
-        Ok(())
-    }
-    
-    pub fn get_string(&mut self, str: &[u16], name: &'static str) -> Result<&mut String> {
-        if ! self.parameters.contains_key(name) {
-            let string = crate::ygopro::message::cast_to_string(&str).ok_or(anyhow!("Failed to get string."))?;
-            self.parameters.insert(name.to_string(), string);
+        if self.message_type == Some(MessageType::SRVPRU(srvpru::MessageType::PlayerDestroy)) {
+            return self.cast_request_to_type::<PlayerDestroy>().map(|req| req.player.clone());
         }
-        Ok(self.parameters.get_mut(name).unwrap())
+        Player::get_player(*self.addr)
+    }
+
+    pub fn get_string(&mut self, str: &[u16], name: &'static str) -> Result<&mut String> {
+        Ok(self.parameters.entry(name.to_string()).or_insert( crate::ygopro::message::string::cast_to_string(&str).ok_or(anyhow!("Failed to cast bytes to string."))?))
     }
 }
 
 impl Player {
-    pub async fn send_chat(&mut self, message: &str, color: Colors) -> Result<()> {
+    pub async fn send_to_client(&mut self, obj: &(impl Struct + MappedStruct + serde::Serialize)) -> Result<()> {
         let socket = self.client_stream_writer.as_mut().ok_or(anyhow!("Socket already taken."))?;
-        send_chat(socket, message, "zh-cn", color).await
+        send(socket, obj).await
     }
 
-    pub async fn send_chat_raw(&mut self, message: &str, color: Colors) -> Result<()> {
-        let socket = self.client_stream_writer.as_mut().ok_or(anyhow!("Socket already taken."))?;
-        send_chat_raw(socket, message, color).await
+    pub async fn send_to_server(&mut self, obj: &(impl Struct + MappedStruct + serde::Serialize)) -> Result<()> {
+        let socket = self.server_stream_writer.as_mut().ok_or(anyhow!("Socket already taken."))?;
+        send(socket, obj).await
     }
 
 }
 
 impl Room {
-    pub async fn send_chat(&mut self, message: &str, region: &str, color: Colors) -> Result<()> {
-        let message = &("[Server]: ".to_string() + &i18n::render(message, region));
-        self.send_chat_raw(message, color).await
-    }
-
-    pub async fn send_chat_raw(&mut self, message: &str, color: Colors) -> Result<()> {
+    pub async fn send(&self, obj: &(impl Struct + MappedStruct + serde::Serialize)) {
         for player in self.players.iter() {
             let mut player = player.lock();
             if let Some(socket) = player.client_stream_writer.as_mut() {
-                send_chat_raw(socket, message, color).await.ok(); // Sender itself find stream already taken. Don't matter.
+                send(socket, obj).await.ok(); // Sender itself find stream already taken. Don't matter.
             }
         }
-        Ok(())
     }
 }
+
+#[macro_export]
+macro_rules! unwrap_or_return {
+    ( $e:expr ) => {
+        match $e {
+            Some(x) => x,
+            None => return Ok(false),
+        }
+    }
+}
+
 
 /*
 pub struct WrappedContext<'this, 'context, Request: Struct + MappedStruct, Attachment> {

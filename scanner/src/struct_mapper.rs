@@ -1,32 +1,14 @@
 use syn::DeriveInput;
 
-#[proc_macro_derive(Struct)]
-pub fn ygopro_struct(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    let struct_ident = input.ident;
-    let struct_name = struct_ident.to_string();
-    let _type = match struct_name {
-        _ if struct_name.starts_with("CTOS") => "CTOS",
-        _ if struct_name.starts_with("STOC") => "STOC",
-        _ if struct_name.starts_with("SRVPRU") => "SRVPRU",
-        _ if struct_name.starts_with("GM") => "GM",
-        _ => "SRVPRU"
-    };
-    let enum_name = if struct_name.starts_with(_type) { &struct_name[_type.len()..] } else { struct_name.as_str() };
-    let type_ident = quote::format_ident!("{}", _type);
-    let enum_class_ident = quote::format_ident!("{}MessageType", _type);
-    let enum_ident = quote::format_ident!("{}", enum_name);
-        
-    let expand = quote! {
-        impl Struct for #struct_ident {}
-        impl MappedStruct for #struct_ident {
-            fn message() -> MessageType {
-                return MessageType::#type_ident(#enum_class_ident::#enum_ident);
-            }
-        }
-    };
-    TokenStream::from(expand)
-}
+#[proc_macro_attribute]
+pub fn ctos(_: TokenStream, input: TokenStream) -> TokenStream { return input; }
+#[proc_macro_attribute]
+pub fn stoc(_: TokenStream, input: TokenStream) -> TokenStream { return input; }
+#[proc_macro_attribute]
+pub fn gm(_: TokenStream, input: TokenStream) -> TokenStream { return input; }
+#[proc_macro_attribute]
+pub fn srvpru(_: TokenStream, input: TokenStream) -> TokenStream { return input; }
+
 
 // ===========================================
 // srvpru_handler!(CTOSMessageType::xxxxx, |context| { false });
@@ -60,7 +42,7 @@ impl Parse for RegisterHandlerInput {
 // Also even you add it, to_string don't work
 // https://github.com/dtolnay/syn/issues/220
 fn expr_to_string(path: syn::ExprPath) -> String {
-    quote!(#path).to_string()
+    quote!(#path).to_string().replace(" ", "")
 }
 
 #[proc_macro]
@@ -74,7 +56,7 @@ pub fn srvpru_handler(input: TokenStream) -> TokenStream {
         0 => { name = "_".to_string(); }
         1 => { name = expr_to_string(input.parameters.pop().unwrap()); }
         2 => { attachment = Some(input.parameters.pop().unwrap()); name = expr_to_string(input.parameters.pop().unwrap()); }
-        _ => { return TokenStream::from(quote!(compile_error!(too much parameters))); }
+        _ => { return syn::Error::new(Span::call_site(), "Too much parameters").to_compile_error().into() }
     }
     if name == "_" { is_always_trigger = true; }
     let name_path: proc_macro2::TokenStream = name.parse().unwrap();
@@ -86,7 +68,7 @@ pub fn srvpru_handler(input: TokenStream) -> TokenStream {
 
     let attachment_statement = attachment.map(|func| quote!(let mut attachment = #func(context);)).unwrap_or(quote!());
     let message_type = if is_enum {
-        let direction = quote::format_ident!("{}", name[0..name.find("MessageType").unwrap()].to_string());
+        let direction = quote::format_ident!("{}", name[0..name.find("::MessageType").unwrap()].to_string().to_uppercase());
         quote!(crate::ygopro::message::MessageType::#direction(#name_path)) 
     } else { quote!(#name_path::message()) };
     let handler_condition = if is_always_trigger { quote! { |_| true } } else { quote!{|context| context.message_type == Some(#message_type) } };

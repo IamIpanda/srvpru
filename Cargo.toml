@@ -19,6 +19,9 @@ encoding_rs = "0.8.28"  # Encoding
 num_enum = "0.5.4"      # Enum as number
 anyhow = "1.0"          # Error
 thiserror = "1.0"       # Error
+rand = "0.8.4"          # Random
+byteorder = "1.4.3"     # Stream Reader
+lzma-rs = "0.2.0"       # LZMA
 
 # Serialization / Deserialization
 serde = { version = "1.0", features = ["derive", "rc"] }
@@ -35,7 +38,8 @@ pretty_env_logger = "0.4.0"
 
 # Http
 reqwest = "0.11.5"
-axum = "0.2.8"
+axum = { version = "0.3.1", features = ["ws"] }
+futures-util = { version = "0.3.17", features = ["io"] }
 
 # Proc macro
 scanner = { path = "./scanner" }

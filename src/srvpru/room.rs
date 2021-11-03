@@ -11,15 +11,13 @@ use tokio::task::JoinHandle;
 
 use parking_lot::RwLock;
 use parking_lot::Mutex;
-use parking_lot::RwLockReadGuard;
-use parking_lot::MappedRwLockReadGuard;
 
+use crate::ygopro::data::LFLISTS;
 use crate::ygopro::message::*;
-use crate::ygopro::constants;
-use crate::srvpru::processor::Handler;
-use crate::srvpru::player::Player;
+
 use crate::srvpru::server;
-use crate::srvpru::structs::*;
+use crate::srvpru::player::Player;
+use crate::srvpru::processor::Handler;
 
 lazy_static! {
     pub static ref ROOMS: RwLock<HashMap<String, Arc<Mutex<Room>>>> = RwLock::new(HashMap::new());
@@ -27,12 +25,12 @@ lazy_static! {
     pub static ref ROOMS_BY_SERVER_ADDR: RwLock<HashMap<SocketAddr, Arc<Mutex<Room>>>> = RwLock::new(HashMap::new());
 }
 
-impl constants::Mode {
+impl crate::ygopro::Mode {
     fn to_str(&self) -> &'static str {
         match *self {
-            constants::Mode::Single => "S",
-            constants::Mode::Match => "M",
-            constants::Mode::Tag => "T",
+            crate::ygopro::Mode::Single => "S",
+            crate::ygopro::Mode::Match => "M",
+            crate::ygopro::Mode::Tag => "T",
         }
     }
 }
@@ -42,7 +40,7 @@ impl HostInfo {
         HostInfo {
             lflist: 0,
             rule: 0,
-            mode: constants::Mode::Single,
+            mode: crate::ygopro::Mode::Single,
             duel_rule: 5,
             no_check_deck: false,
             no_shuffle_deck: false,
@@ -63,12 +61,12 @@ impl HostInfo {
         for _controller in controllers.split(',') {
             let controller = _controller.trim();
             match controller {
-                "M" | "MATCH" => { self.mode = constants::Mode::Match },
-                "T" | "TAG" => { self.mode = constants::Mode::Tag },
+                "M" | "MATCH" => { self.mode = crate::ygopro::Mode::Match },
+                "T" | "TAG" => { self.mode = crate::ygopro::Mode::Tag },
                 "OT" | "TCG" => { self.rule = 5 },
-                "TO" | "TCGONLY" => { self.rule = 1 },
-                "OO" | "OCGONLY" => { self.rule = 0 },
-                "SC" | "CN" | "CCG" | "CHINESE" => { self.rule = 2 },
+                "TO" | "TCGONLY" => { self.rule = 1; self.lflist = LFLISTS.first_tcg() },
+                "OO" | "OCGONLY" => { self.rule = 0; self.lflist = 0 },
+                "SC" | "CN" | "CCG" | "CHINESE" => { self.rule = 2; self.lflist = -1; },
                 "DIY" | "CUSTOM" => { self.rule = 3 },
                 "NF" | "NOLFLIST" => { self.lflist = -1 },
                 "NU" | "NOUNIQUE" => { self.rule = 4 },
@@ -78,7 +76,7 @@ impl HostInfo {
                 _ if controller.starts_with("LP") => { self.start_lp = (&controller[2..]).parse().unwrap_or(8000) },
                 _ if controller.starts_with("START") => { self.start_hand = (&controller[5..]).parse().unwrap_or(5) },
                 _ if controller.starts_with("DRAW") => { self.draw_count = (&controller[4..]).parse().unwrap_or(1) },
-                _ if controller.starts_with("LFLIST") => { self.lflist = (&controller[6..]).parse().unwrap_or(-1) },
+                _ if controller.starts_with("LFLIST") => { self.lflist = (&controller[6..]).parse().unwrap_or(0) },
                 _ if controller.starts_with("MR") => { self.rule = (&controller[2..]).parse().unwrap_or(5) },
                 _ => ()
             }
@@ -129,31 +127,42 @@ pub enum RoomStatus {
 #[derive(Debug)]
 pub struct Room {
     pub host_info: HostInfo,
+    /// The origin password used to join room
     pub origin_name: String,
+    /// The room name
     pub name: String,
     pub status: RoomStatus,
     pub server_addr: Option<SocketAddr>,
     pub server_process: Option<Child>,
     pub server_stderr_hanlder: Option<JoinHandle<()>>,
     pub players: Vec<Arc<Mutex<Player>>>,
+    pub flags: HashMap<String, String>
 }
 
 impl Room {
+    // ----------------------------------------------------------------------------------------------------
+    /// ## spawn 
+    // ---------------------------------------------------------------------------------------------------- 
+    /// Try to spawn a room to actual ygopro server.
+    // ----------------------------------------------------------------------------------------------------
     async fn spawn(this: &mut Arc<Mutex<Room>>) -> anyhow::Result<()> {
         let configuration = crate::srvpru::get_configuration();
-        {
+        let addr = {
             let mut this = this.lock();
             let host_info = &(this.host_info);
-            let mut process = Command::new(configuration.ygopro.binary.clone()).args(&host_info.generate_process_args())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()?;
+            let mut process = 
+                Command::new(configuration.ygopro.binary.clone())
+                .current_dir(configuration.ygopro.cwd.clone())
+                .args(&host_info.generate_process_args())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()?;
             let mut lines = BufReader::new(process.stdout.as_mut().ok_or(anyhow!("Spawned room don't contains stdout."))?).lines();
             let port = if let Some(line) = lines.next_line().await? {
                 line.parse::<u16>().unwrap_or(0)  
             } else { 0 };
-            if port == 0 { return Err(anyhow!("Cannot determine port"))?; }
-            let addr = (format!("{}:{}", configuration.ygopro.address, port)).parse().unwrap();
+            if port == 0 { Err(anyhow!("Cannot determine port"))?; }
+            let addr = (format!("{}:{}", configuration.ygopro.address, port)).parse()?;
 
             this.server_process = Some(process);
             this.server_addr = Some(addr);
@@ -162,37 +171,36 @@ impl Room {
                 // Wait some time, or player cannot join in because server not ready. (Maybe docker latency)
                 tokio::time::sleep(tokio::time::Duration::from_millis(configuration.ygopro.wait_start)).await; 
             }
-        }
-        {
-            let mut rooms_by_server_addr = ROOMS_BY_SERVER_ADDR.write();
-            rooms_by_server_addr.insert(this.lock().server_addr.as_ref().unwrap().clone(), this.clone());
-        }
-        let server_stderr_hanlder = Some(Room::follow_process(this));
-        let mut this = this.lock();
-        this.server_stderr_hanlder = server_stderr_hanlder;
-        info!("Room {} created, target {:?}", this.name, this.server_addr);
+            addr
+        };
+        ROOMS_BY_SERVER_ADDR.write().insert(addr, this.clone());
+        let server_stderr_hanlder = Some(Room::follow_process(this.clone())?);
+        let mut room = this.lock();
+        room.server_stderr_hanlder = server_stderr_hanlder;
+        info!("Room {} created, target {:?}", room.name, room.server_addr);
         Ok(())
     }
 
-    fn follow_process(this: &mut Arc<Mutex<Room>>) -> JoinHandle<()> {
-        let room = this.clone();
-        let stderr = { this.lock().server_process.as_mut().unwrap().stderr.take().unwrap() };
+    fn follow_process(room: Arc<Mutex<Room>>) -> anyhow::Result<JoinHandle<()>> {
+        let stderr = room.lock()
+            .server_process.as_mut().ok_or(anyhow!("Room don't have server process."))?
+            .stderr.take().ok_or(anyhow!("Room don't have STDERR"))?;
+        let addr = room.lock().server_addr.ok_or(anyhow!("Room don't have a server addr."))?;
         let mut lines = BufReader::new(stderr).lines();
-        tokio::spawn(async move {
+        Ok(tokio::spawn(async move {
             while let Result::Ok(Some(line)) = lines.next_line().await {
                 warn!("stderr from ygopro server {}", line)
             }
-            let addr = { room.lock().server_addr.as_ref().unwrap().clone() };
-            server::trigger_internal(addr, RoomDestroy { room: room.clone() }).await.ok();
+            server::trigger_internal(addr, crate::ygopro::message::srvpru::RoomDestroy { room: room.clone() }).await.ok();
             if Arc::strong_count(&room) > 4 {
                 let room = room.lock();
                 warn!("Room {} seems still exist reference when drop. This may lead to memory leak.", room.name);
             }
-        })
+        }))
     }
 
     pub async fn join(this: Arc<Mutex<Room>>, client_addr: &SocketAddr, client_writer: OwnedWriteHalf) -> Option<()> {
-        let player = Player::new(&this, client_addr.clone(), client_writer).await?;
+        let player = Player::new(&this, client_addr.clone(), client_writer).await.ok()?;
         let mut room = this.lock();
         info!("Player {} join room {}", player.lock().name, room.name);
         room.players.push(player);
@@ -200,8 +208,21 @@ impl Room {
         Some(())
     }
 
-    /// Remove room from global hash tables.
-    /// Mention players won't be processed. It should be processed by player self.
+    // ----------------------------------------------------------------------------------------------------
+    /// ## destroy
+    // ---------------------------------------------------------------------------------------------------- 
+    /// Try to drop that room.
+    /// 
+    /// `destroy` do following things:
+    /// - mark this room as deleted.
+    /// - remove itself from `ROOMS`.
+    /// - remove itself from room query table.
+    /// - stop stderr listener.
+    /// 
+    /// `destroy` **WON'T** do following things:
+    /// - try to drop any player inner it. (Done by server)
+    /// - drop itself. (RC)
+    // ----------------------------------------------------------------------------------------------------
     pub fn destroy(this: &Arc<Mutex<Room>>) {
         let mut this = this.lock();
         if this.status == RoomStatus::Deleted { return; }
@@ -242,6 +263,7 @@ impl Room {
             server_process: None,
             server_stderr_hanlder: None,
             players: Vec::new(),
+            flags: HashMap::new()
         };
         let mut room = Arc::new(Mutex::new(_room));
         if let Err(e) = Room::spawn(&mut room).await {
@@ -249,45 +271,52 @@ impl Room {
         }
         let addr = { room.lock().server_addr.clone().unwrap() };
         let room_for_message = room.clone();
-        server::trigger_internal(addr, RoomCreated { room: room_for_message }); 
+        server::trigger_internal(addr, crate::ygopro::message::srvpru::RoomCreated { room: room_for_message }); 
         room
     }
 
-    pub async fn find_or_create_by_name<'a>(name: &str) -> MappedRwLockReadGuard<'a, Arc<Mutex<Room>>> {
-        let name = name.to_string();
-        let contains: bool = {
-            let rooms = ROOMS.read();
-            rooms.contains_key(&name)
-        };
-        if !contains {
+    pub async fn get_or_create_by_name<'a>(name: &str) -> Arc<Mutex<Room>> {
+        if ! ROOMS.read().contains_key(name) {
             let room = Room::new(&name).await;
             let mut rooms = ROOMS.write();
-            rooms.insert(name.clone(), room);
+            rooms.insert(name.to_string().clone(), room);
         }
-        RwLockReadGuard::map(ROOMS.read(), move |rooms| rooms.get(&name).unwrap())
+        ROOMS.read().get(name).map(|room| room.clone()).unwrap()
     }
 
-    pub fn find_room_by_name(name: &str) -> Option<Arc<Mutex<Room>>> {
-        let rooms = ROOMS.read();
-        rooms.get(name).map(|room| room.clone())
+    pub fn get_room(name: &str) -> Option<Arc<Mutex<Room>>> {
+        ROOMS.read().get(name).map(|room| room.clone())
+    }
+
+    pub fn get_room_by_client_addr(client_addr: SocketAddr) -> Option<Arc<Mutex<Room>>> {
+        ROOMS_BY_CLIENT_ADDR.read().get(&client_addr).map(|room| room.clone())
+    }
+
+    pub fn get_room_by_server_addr(client_addr: SocketAddr) -> Option<Arc<Mutex<Room>>> {
+        ROOMS_BY_SERVER_ADDR.read().get(&client_addr).map(|room| room.clone())
     }
 
     pub fn register_handlers() {
-        Handler::follow_message::<CTOSJoinGame, _>(10, "room_producer", |context, request| Box::pin(async move { 
+        Handler::follow_message::<ctos::JoinGame, _>(10, "room_producer", |context, request| Box::pin(async move { 
             let password = context.get_string(&request.pass, "pass")?;
-            let room = Room::find_or_create_by_name(password).await;
-            let socket = context.socket.take().unwrap();
-            Room::join(room.clone(), &context.addr, socket).await;
+            let room = Room::get_or_create_by_name(password).await;
+            let socket = context.socket.take().ok_or(anyhow!("Socket already taken."))?;
+            Room::join(room, &context.addr, socket).await;
             Ok(false)
         })).register();
 
-        Handler::follow_message::<RoomDestroy, _>(255, "room_dropper", |_, request| Box::pin(async move {
+        Handler::follow_message::<srvpru::RoomDestroy, _>(100, "room_dropper", |_, request| Box::pin(async move {
             Room::destroy(&request.room);
             Ok(false)
         })).register();
 
         Handler::register_handlers("room", Direction::CTOS, vec!("room_producer"));
         Handler::register_handlers("room", Direction::SRVPRU, vec!("room_dropper"))
+    }
+
+    pub fn init() -> anyhow::Result<()> {
+        Room::register_handlers();
+        Ok(())
     }
 }
 
@@ -319,9 +348,7 @@ macro_rules! room_attach {
 
         #[doc(hidden)]
         fn _get_room_attachment<'a, 'b>(context: &crate::srvpru::Context<'a>, sure: bool) -> Option<parking_lot::MappedRwLockWriteGuard<'b, RoomAttachment>> {
-            let room = context.get_room();
-            if room.is_none() { return None; }
-            let room_mutex = room.unwrap();
+            let room_mutex = context.get_room()?;
             let room = room_mutex.lock();
             let name = &room.origin_name;
             
@@ -348,17 +375,17 @@ macro_rules! room_attach {
 
         #[doc(hidden)]
         #[allow(dead_code)]
-        pub fn get_attachment_by_name<'a>(request: &crate::ygopro::message::CTOSJoinGame) -> Option<parking_lot::MappedRwLockWriteGuard<'a, RoomAttachment>> {
-            let name = crate::ygopro::message::cast_to_string(&request.pass).unwrap_or_default();
+        pub fn get_attachment_by_name<'a>(context: &mut crate::srvpru::Context<'a>, request: &crate::ygopro::message::ctos::JoinGame) -> Option<parking_lot::MappedRwLockWriteGuard<'a, RoomAttachment>> {
+            let name = context.get_string(&request.pass, "pass").ok()?;
             if contains_room_attachment(&name) {
-                Some(parking_lot::RwLockWriteGuard::map(ROOM_ATTACHMENTS.write(), |room_attachments| room_attachments.get_mut(&name).unwrap()))
+                Some(parking_lot::RwLockWriteGuard::map(ROOM_ATTACHMENTS.write(), |room_attachments| room_attachments.get_mut(name).unwrap()))
             }
             else { None }
         }
 
         #[doc(hidden)]
         #[allow(dead_code)]
-        fn drop_room_attachment(room_destroy: &crate::srvpru::structs::RoomDestroy) -> Option<RoomAttachment> {
+        fn drop_room_attachment(room_destroy: &crate::ygopro::message::srvpru::RoomDestroy) -> Option<RoomAttachment> {
             let room = room_destroy.room.lock();
             let name = &room.name;
             ROOM_ATTACHMENTS.write().remove(name)
@@ -367,9 +394,69 @@ macro_rules! room_attach {
         #[doc(hidden)]
         #[allow(dead_code)]
         fn register_room_attachement_dropper() {
-            srvpru_handler!(crate::srvpru::structs::RoomDestroy, |_, request| {
+            let plugin_name = std::path::Path::new(file!()).file_stem().unwrap().to_str().unwrap();
+            let dropper_name = format!("{}_room_attachment_dropper", plugin_name);
+            srvpru_handler!(crate::ygopro::message::srvpru::RoomDestroy, |_, request| {
                 drop_room_attachment(request);
-            }).register_as(&format!("{}_room_attachment_dropper", std::path::Path::new(file!()).file_stem().unwrap().to_str().unwrap()));
+            }).register_as(&dropper_name);
+            crate::srvpru::Handler::register_handlers(plugin_name, crate::ygopro::message::Direction::SRVPRU, vec![&dropper_name]);
         }
     };
+}
+
+macro_rules! room_attachment_return_type {
+    () => { Option<parking_lot::MappedRwLockWriteGuard<'b, RoomAttachment>> };
+    ($type: ty) => { $type }
+}
+
+#[macro_export]
+macro_rules! export_room_attach_as {
+    ($name: ident$(, $type: ty, $transformer: ident)?) => {
+        #[doc(hidden)]
+        #[allow(dead_code)]
+        impl crate::srvpru::Room {
+            pub fn $name<'b>(&self) -> room_attachment_return_type!($($type)?) {
+                let result = 
+                    if !contains_room_attachment(&self.origin_name) { None }
+                    else { Some(parking_lot::RwLockWriteGuard::map(ROOM_ATTACHMENTS.write(), |room_attachments| room_attachments.get_mut(&self.origin_name).unwrap())) };
+                $(let result = $transformer(result);)?
+                result
+            }
+        }
+
+        #[doc(hidden)]
+        #[allow(dead_code)]
+        impl<'a> crate::srvpru::Context<'a> {
+            pub fn $name<'b>(&self) -> room_attachment_return_type!($($type)?) {
+                let result = if let Some(room) = self.get_room() {
+                    let _room = room.lock();
+                    let name = &_room.origin_name;
+                    if !contains_room_attachment(name) { None }
+                    else { Some(parking_lot::RwLockWriteGuard::map(ROOM_ATTACHMENTS.write(), |room_attachments| room_attachments.get_mut(name).unwrap())) }
+                } else { None };
+                $(let result = $transformer(result);)?
+                result 
+            }
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! export_room_attach_in_join_game_as {
+    ($name: ident$(, $type: ty, $transformer: ident)?) => {
+        #[doc(hidden)]
+        #[allow(dead_code)]
+        impl<'a> crate::srvpru::Context<'a> {
+            pub fn $name<'b>(&mut self, request: &crate::ygopro::message::ctos::JoinGame) -> room_attachment_return_type!($($type)?) {
+                let result = if let Some(room) = self.get_room_in_join_game(request) {
+                    let _room = room.lock();
+                    let name = &_room.origin_name;
+                    if !contains_room_attachment(name) { None }
+                    else { Some(parking_lot::RwLockWriteGuard::map(ROOM_ATTACHMENTS.write(), |room_attachments| room_attachments.get_mut(name).unwrap())) }
+                } else { None };
+                $(let result = $transformer(result);)?
+                result  
+            }
+        }
+    }
 }

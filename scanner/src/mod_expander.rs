@@ -35,7 +35,6 @@ pub fn expand_mod(input: TokenStream) -> TokenStream {
         Some(manifest_dir) => std::path::PathBuf::from(manifest_dir).join(path),
         None => std::path::PathBuf::from(path),
     };
-    println!("expanding mod under directory {:?}...", &dir);
 
     let expanded = match scan_directory(dir) {
         Ok(names) => names.into_iter().map(|name| {

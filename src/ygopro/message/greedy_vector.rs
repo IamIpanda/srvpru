@@ -1,16 +1,22 @@
 use std::marker::PhantomData;
-use serde::ser::{Serializer, SerializeTuple};
-use serde::de::{Deserializer, Visitor, SeqAccess, Error};
+use serde::ser::Serializer;
+use serde::ser::SerializeTuple;
+use serde::ser::Serialize;
+use serde::de::Error;
+use serde::de::SeqAccess;
+use serde::de::Visitor;
+use serde::de::Deserialize;
+use serde::de::Deserializer;
 
-trait GreedyVec<'a, const N: usize>: Sized {
+pub trait GreedyVector<'a, const N: usize>: Sized {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer;
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'a>;
 }
 
-macro_rules! greedy_vec {
+macro_rules! greedy_vector {
     ($($max_length:expr),+) => {
         $(
-            impl<'a, T> GreedyVec<'a, $max_length> for Vec<T> where T: Default + Copy + Serialize + Deserialize<'a> {
+            impl<'a, T> GreedyVector<'a, $max_length> for Vec<T> where T: Default + Copy + Serialize + Deserialize<'a> {
                 fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
                     let mut seq = serializer.serialize_tuple(self.len())?;
                     for elem in &self[..] {
@@ -54,3 +60,5 @@ macro_rules! greedy_vec {
         )+
     }
 }
+
+greedy_vector! { 90, 255, 65536 }

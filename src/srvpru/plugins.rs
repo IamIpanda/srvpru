@@ -1,9 +1,29 @@
+// ============================================================
+//! * Plugin code format
+// ------------------------------------------------------------
+//! For plugin file, all srvpru will obey follow orders:
+//! * rust config
+//! * Doc
+//! * `use ...`
+//! * `set_configuration!`
+//! * `depend_on!`
+//! * `player_attach!`
+//! * `room_attach!`
+//! * other macro annonucement
+//! * `fn init()`
+//! * other format functions
+//! * `fn register_handlers()`
+//! * other tool functions for handler content
+//! * `fn start_server()`
+//! * other tool functions for server
+// ============================================================
+
 use std::fs;
 use std::path::Path;
 use std::io::Read;
 
 pub fn load_configuration<T: serde::de::DeserializeOwned>(name: &str) -> anyhow::Result<T> {
-    let configuration_dir = "/Users/iami/Programming/mycard/srvpru/config";
+    let configuration_dir = std::env::var("SRVPRU_CONFIG_PATH").unwrap_or(".".to_string());
     for entry in fs::read_dir(configuration_dir)? {
         if let Ok(file) = entry {
             let path_name = file.path();
@@ -15,7 +35,7 @@ pub fn load_configuration<T: serde::de::DeserializeOwned>(name: &str) -> anyhow:
                     match extenion {
                         "toml" => {
                             let mut data = String::new();
-                            file.read_to_string(&mut data).unwrap();
+                            file.read_to_string(&mut data)?;
                             return Ok(toml::from_str::<T>(&data)?);
                         }
                         "yaml" => return Ok(serde_yaml::from_reader::<_, T>(file)?),
@@ -45,6 +65,7 @@ macro_rules! set_configuration {
             Ok(())
         }
 
+        #[inline]
         pub fn get_configuration() -> &'static Configuration {
             CONFIGURATION.get().expect(&format!("{} configuration not set", file!()))
         }
@@ -53,8 +74,13 @@ macro_rules! set_configuration {
 
 #[macro_export]
 macro_rules! depend_on {
-    () => {
-        
+    ($($field: literal),*) => {
+        fn register_dependency() -> anyhow::Result<()> {
+            let os_module_name = std::path::Path::new(file!()).file_stem().ok_or(anyhow!("Can not determain module name."))?;
+            let module_name = os_module_name.to_str().ok_or(anyhow!("Can not transform module name to utf-8"))?;
+            crate::srvpru::Handler::register_dependencies(module_name, vec![$($field),*]);
+            Ok(())
+        }
     };
 }
 

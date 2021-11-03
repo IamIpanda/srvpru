@@ -7,13 +7,13 @@ use parking_lot::RwLock;
 use tokio::io::AsyncWriteExt;
 use anyhow::Result;
 
+use crate::ygopro::message::stoc;
+use crate::ygopro::message::Struct;
 use crate::ygopro::message::MappedStruct;
-use crate::ygopro::message::STOCMessageType;
-use crate::ygopro::message::deserialize_struct_by_type;
-use crate::ygopro::message::get_message_type;
 use crate::ygopro::message::Direction;
 use crate::ygopro::message::MessageType;
-use crate::ygopro::message::Struct;
+use crate::ygopro::message::try_get_message_type;
+use crate::ygopro::message::deserialize_struct_by_type;
 
 pub struct Handler {
     pub name: String,
@@ -24,8 +24,11 @@ pub struct Handler {
 }
 
 pub enum HandlerCondition {
+    /// Always trigger this handler.
     Always,
+    /// Trigger when detect specific message type
     MessageType(MessageType),
+    /// Run a function to concern if need to run
     Dynamic(Box<dyn Fn(&mut Context) -> bool + Send + Sync>)
 }
 
@@ -62,10 +65,11 @@ impl Handler {
     where S: Struct,
         F: for<'a, 'b> Fn(&'b mut Context<'a>, &'b S) -> Pin<Box<dyn Future<Output = Result<bool>> + Send + 'b>>,
         F: Send + Sync + 'static {
-            let mut request = context.request.take().unwrap();
-            let interrupt = execution(context, request.downcast_mut::<S>().unwrap()).await;
+            let mut request = context.request.take().ok_or(anyhow!("request already taken."))?;
+            let data = request.downcast_mut::<S>().ok_or(anyhow!("request is in wrong type."))?;
+            let interrupt = execution(context, data).await?;
             context.request.replace(request);
-            interrupt
+            Ok(interrupt)
     }
 }
 
@@ -91,7 +95,8 @@ unsafe impl Sync for Handler {}
 
 lazy_static! {
     pub static ref HANDLER_LIBRARY: RwLock<HashMap<String, Handler>> = RwLock::new(HashMap::new());
-    pub static ref HANDLER_LIBRARY_BY_PLUGIN: RwLock<HashMap<String, HashMap<Direction, Vec<&'static str>>>> = RwLock::new(HashMap::new());
+    pub static ref HANDLER_LIBRARY_BY_PLUGIN: RwLock<HashMap<String, HashMap<Direction, Vec<String>>>> = RwLock::new(HashMap::new());
+    pub static ref HANDLER_DEPENDENCIES: RwLock<HashMap<String, Vec<&'static str>>> = RwLock::new(HashMap::new());
 }
 
 impl Handler {
@@ -108,10 +113,11 @@ impl Handler {
         HANDLER_LIBRARY.write().insert(name.to_string(), handler);
     }
 
-    pub fn register_handlers(plugin_name: &str, direction: Direction, mut handlers: Vec<&'static str>) {
+    pub fn register_handlers(plugin_name: &str, direction: Direction, handlers: Vec<&str>) {
+        let mut handlers: Vec<String> = handlers.into_iter().map(|_ref| _ref.to_string()).collect();
         let mut handler_library = HANDLER_LIBRARY.write();
         for handler_name in handlers.iter() {
-            if let Some(mut handler) = handler_library.get_mut(*handler_name) { handler.owner = Some(plugin_name.to_string()); }
+            if let Some(mut handler) = handler_library.get_mut(handler_name) { handler.owner = Some(plugin_name.to_string()); }
             else { warn!("Plugin {} is try to register a unexist handler {}.", plugin_name, handler_name) }
         }
 
@@ -120,6 +126,10 @@ impl Handler {
         let plugin_library = handler_library.get_mut(plugin_name).unwrap();
         if let Some(origin_handlers) = plugin_library.get_mut(&direction) { origin_handlers.append(&mut handlers); }
         else { plugin_library.insert(direction, handlers); }
+    }
+
+    pub fn register_dependencies(plugin_name: &str, dependencies: Vec<&'static str>) {
+        HANDLER_DEPENDENCIES.write().insert(plugin_name.to_string(), dependencies);
     }
 }
 
@@ -160,12 +170,20 @@ pub enum ProcessorError {
     FailedToWrite(anyhow::Error),
     #[error("Some error happened in processing.")]
     FailedToProcess(anyhow::Error),
-    #[error("Waiting for data timeout.")]
-    Timeout,
-    #[error("Socket listen report an error.")]
-    Drop(anyhow::Error),
+    #[error("Failed to serialize a response")]
+    FailedToSerialize(Box<bincode::ErrorKind>),
     #[error("Some handler decide to kick the client off.")]
     Abort
+}
+
+#[derive(Error, Debug)]
+pub enum ListenError {
+    #[error("Input data oversize.")]
+    Oversize,
+    #[error("Waiting for data timeout.")]
+    Timeout,
+    #[error("Socket listener report an error.")]
+    Drop(anyhow::Error),
 }
 
 impl core::convert::From<anyhow::Error> for ProcessorError {
@@ -179,7 +197,7 @@ impl Processor {
     pub async fn process_multiple_messages<'a>(&self, socket: &mut Option<tokio::net::tcp::OwnedWriteHalf>, addr: &'a SocketAddr, data: &'a [u8]) -> core::result::Result<(), ProcessorError> {
         let mut rest_data = data;
         let mut count = 0;
-        let mut datas: Vec<ResponseData<'a>> = Vec::new();
+        let mut responses: Vec<ResponseData<'a>> = Vec::new();
         let mut no_change = true;
         while rest_data.len() > 0 {
             if rest_data.len() < 2 { Err(ProcessorError::BufferLength)?; } 
@@ -190,7 +208,7 @@ impl Processor {
 
             let current_data = self.process_message(socket, addr, child_data).await?;
             no_change = no_change && matches!(current_data, ResponseData::Reference(_));
-            datas.push(current_data);
+            responses.push(current_data);
             count += 1;
             if count > 1000 { Err(ProcessorError::Oversize)?; }
             rest_data = &rest_data[(2 + length) as usize..]
@@ -204,8 +222,8 @@ impl Processor {
             }
             // Some data changed, send data one-by-one.
             else {
-                for data in datas { 
-                    if let Err(error) = match data {
+                for response in responses { 
+                    if let Err(error) = match response {
                         ResponseData::Reference(actual_data) => socket.write_all(actual_data).await,
                         ResponseData::Value(actual_data) => socket.write_all(&actual_data).await,
                         ResponseData::Skip => Ok(()),
@@ -219,7 +237,7 @@ impl Processor {
 
     async fn process_message<'a>(&self, socket: &mut Option<tokio::net::tcp::OwnedWriteHalf>, addr: &'a SocketAddr, request_buffer: &'a [u8]) -> core::result::Result<ResponseData<'a>, ProcessorError> {
         // read header
-        let message_type = get_message_type(self.direction, request_buffer[2]);
+        let message_type = try_get_message_type(self.direction, request_buffer[2]);
         let data = &request_buffer[3..];
         // deserialize item
         let request = match message_type {
@@ -247,9 +265,9 @@ impl Processor {
         let mut interrupted = self.process_context(&mut context).await?;
 
         // Game message add on
-        if !interrupted && context.message_type == Some(MessageType::STOC(STOCMessageType::GameMessage)) {
+        if !interrupted && context.message_type == Some(MessageType::STOC(stoc::MessageType::GameMessage)) {
             if let Some(game_message_general) = context.request {
-                let option_game_message = game_message_general.downcast::<crate::ygopro::message::STOCGameMessage>();
+                let option_game_message = game_message_general.downcast::<stoc::GameMessage>();
                 if let Ok(game_message) = option_game_message {
                     context.message_type = Some(MessageType::GM(game_message.kind));
                     context.request = Some(game_message.message);
@@ -261,7 +279,13 @@ impl Processor {
         
         // return response
         match context.response {
-            Some(data) => Ok(ResponseData::Value(crate::ygopro::message::wrap_data(context.message_type.as_ref().unwrap(), &bincode::serialize(&*data).unwrap()))),
+            Some(data) => {
+                let response = bincode::serialize(&*data).map_err(|err| anyhow!(ProcessorError::FailedToSerialize(err)))?;
+                if let Some(message_type) = context.message_type {
+                    Ok(ResponseData::Value(crate::ygopro::message::generate::wrap_data(message_type, &response)))
+                }
+                else { Ok(ResponseData::Skip) }
+            },
             None => if interrupted {
                 trace!("    Message is blocked.");
                 Ok(ResponseData::Skip)

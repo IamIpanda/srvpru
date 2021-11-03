@@ -5,6 +5,7 @@
 // ============================================================
 
 use crate::ygopro::message;
+use crate::ygopro::message::srvpru;
 use crate::srvpru::processor::Handler;
 
 pub fn register_handlers() {
@@ -30,6 +31,15 @@ pub fn register_handlers() {
 
     Handler::new(0, "internal_debugger", |_| true, |context| Box::pin(async move {
         debug!("SRVPRU Message [{:}] -- {:?}", context.addr, context.message_type.as_ref().unwrap());
+        if context.message_type == Some(message::MessageType::SRVPRU(srvpru::MessageType::CtosProcessError)) {
+            debug!("CTOS ERROR - {:?}", context.cast_request_to_type::<srvpru::CtosProcessError>().unwrap().error);
+        }
+        if context.message_type == Some(message::MessageType::SRVPRU(srvpru::MessageType::StocProcessError)) {
+            debug!("STOC ERROR - {:?}", context.cast_request_to_type::<srvpru::StocProcessError>().unwrap().error);
+        }
+        if context.message_type == Some(message::MessageType::SRVPRU(srvpru::MessageType::InternalProcessError)) {
+            debug!("INTERNAL ERROR - {:?}", context.cast_request_to_type::<srvpru::InternalProcessError>().unwrap().error);
+        }
         Ok(false)
     })).register();
 

@@ -8,7 +8,7 @@ use num_enum::TryFromPrimitive;
 
 use crate::srvpru::Handler;
 use crate::ygopro::message::Direction;
-use crate::ygopro::message::CTOSJoinGame;
+use crate::ygopro::message::ctos::JoinGame;
 use crate::ygopro::message::HostInfo;
 
 pub fn init() -> anyhow::Result<()> {
@@ -27,7 +27,7 @@ pub enum Action {
 }
 
 fn register_handlers() {
-    Handler::follow_message::<CTOSJoinGame, _>(9, "mycard_room", |context, request| Box::pin(async move {
+    Handler::follow_message::<JoinGame, _>(9, "mycard_room", |context, request| Box::pin(async move {
         let encrypted = context.get_string(&request.pass, "pass")?;
         let bytes = encrypted.as_bytes();
         let first_byte = bytes[0];
@@ -42,7 +42,7 @@ fn register_handlers() {
                     lflist: 1,
                     time_limit: 240,
                     rule: (opt1 >> 5) & 0x7,
-                    mode: crate::ygopro::constants::Mode::try_from((opt1 >> 3) & 0x3)?,
+                    mode: crate::ygopro::Mode::try_from((opt1 >> 3) & 0x3)?,
                     padding: [0; 3],
                     duel_rule: (opt0 >> 1) | 0x5,
                     no_check_deck: (opt1 >> 1) & 1 == 1,

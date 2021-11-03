@@ -4,13 +4,14 @@ use serde_repr::Deserialize_repr;
 use num_enum::IntoPrimitive;
 use num_enum::TryFromPrimitive;
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
+#[repr(u16)]
 pub enum Network {
     ServerId = 29736,
     ClientId = 57078,
 }
 
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug, PartialOrd, Ord, Hash)]
 #[repr(u8)]
 pub enum Netplayer {
     Player1 = 0,
@@ -22,7 +23,13 @@ pub enum Netplayer {
     Observer = 7,
 }
 
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
+impl std::default::Default for Netplayer {
+    fn default() -> Self {
+        return Netplayer::Observer;
+    }
+}
+
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
 #[repr(u8)]
 pub enum PlayerChange {
     Observe = 8,
@@ -31,7 +38,8 @@ pub enum PlayerChange {
     Leave = 11,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
+#[repr(u8)]
 pub enum ErrorMessage {
     Joinerror = 1,
     Deckerror = 2,
@@ -39,7 +47,7 @@ pub enum ErrorMessage {
     Vererror = 4,
 }
 
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive, TryFromPrimitive, Hash, Debug)]
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug, Hash)]
 #[repr(u8)]
 pub enum Mode {
     Single = 0,
@@ -47,8 +55,8 @@ pub enum Mode {
     Tag = 2,
 }
 
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
-#[repr(u32)]
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
+#[repr(u8)]
 pub enum Location {
     Deck = 1,
     Hand = 2,
@@ -59,14 +67,14 @@ pub enum Location {
     Extra = 64,
     Overlay = 128,
     OnField = 12,
-    FZone = 256,
-    PZone = 512,
-    DeckBot = 65537,
-    DeckShf = 131073,
+    // FZone = 256,
+    // PZone = 512,
+    // DeckBot = 65537,
+    // DeckShf = 131073,
 }
 
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
-#[repr(u32)]
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
+#[repr(u8)]
 pub enum Position {
     FaceupAttack = 1,
     FaceDownAttack = 2,
@@ -76,10 +84,10 @@ pub enum Position {
     Facedown = 10,
     Attack = 3,
     Defense = 12,
-    NoFlipEffect = 65536
+    // NoFlipEffect = 65536
 }
 
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Hash, Debug)]
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug, Hash)]
 #[repr(u8)]
 pub enum GameMessage {
     Retry = 1,
@@ -179,7 +187,7 @@ pub enum GameMessage {
 
 pub type GMMessageType = GameMessage;
 
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
 #[repr(u32)]
 pub enum Timing {
     DrawPhase = 1,
@@ -210,7 +218,7 @@ pub enum Timing {
     Equip = 33554432,
 }
 
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
 #[repr(u32)]
 pub enum Type {
     Monster = 1,
@@ -240,7 +248,7 @@ pub enum Type {
     Link = 67108864,
 }
 
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
 #[repr(u32)]
 pub enum Race {
     Warrior = 1,
@@ -270,7 +278,7 @@ pub enum Race {
     Cybers = 16777216,
 }
 
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
 #[repr(u32)]
 pub enum Reason {
     Destroy = 0x1,
@@ -303,7 +311,7 @@ pub enum Reason {
     LostOverlay = 0x20000000
 }
 
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
 #[repr(u32)]
 pub enum Status {
     Disabled = 0x0001,
@@ -339,7 +347,7 @@ pub enum Status {
     SpsummonTurn = 0x40000000,
 }
 
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
 #[repr(u32)]
 pub enum Query {
     Code = 0x1,
@@ -367,7 +375,8 @@ pub enum Query {
     Link = 0x800000
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
+#[repr(u32)]
 pub enum Attribute {
     Earth = 1,
     Water = 2,
@@ -378,7 +387,9 @@ pub enum Attribute {
     Devine = 64,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
+#[repr(u32)]
 pub enum Linkmarkers {
     BottomLeft = 1,
     Bottom = 2,
@@ -390,7 +401,8 @@ pub enum Linkmarkers {
     TopRight = 256,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
+#[repr(u8)]
 pub enum Duelstage {
     Begin = 0,
     Finger = 1,
@@ -400,8 +412,8 @@ pub enum Duelstage {
     End = 5,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, IntoPrimitive)]
-#[repr(u16)]
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
+#[repr(u8)]
 pub enum Colors {
     Observer = 7,
     Lightblue = 8,
@@ -416,7 +428,13 @@ pub enum Colors {
     Darkgray = 19,
 }
 
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
+impl std::default::Default for Colors {
+    fn default() -> Self {
+        return Colors::Observer;
+    }
+}
+
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
 #[repr(u8)]
 pub enum Hint {
     Event = 1,
@@ -432,17 +450,17 @@ pub enum Hint {
     Zone = 11,
 }
 
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, IntoPrimitive)]
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
 #[repr(u32)]
 pub enum Phase {
-    Draw = 0x01,
-    Standby = 0x02,
-    Main1 = 0x04,
-    BattleStart = 0x08,
-    BattleStep = 0x10,
-    Damage = 0x20,
-    DamageCalculate = 0x40,
-    Battle = 0x80,
-    Main2 = 0x100,
-    End = 0x200
+    Draw = 1,
+    Standby = 2,
+    Main1 = 4,
+    BattleStart = 8,
+    BattleStep = 16,
+    Damage = 32,
+    DamageCalculate = 64,
+    Battle = 128,
+    Main2 = 256,
+    End = 512,
 }

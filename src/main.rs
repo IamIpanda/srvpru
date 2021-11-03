@@ -7,20 +7,20 @@
 #[macro_use] extern crate log;
 extern crate pretty_env_logger;
 
-mod ygopro;
-mod srvpru;
+#[macro_use] mod ygopro;
+#[macro_use] mod srvpru;
 
 use crate::srvpru::Player;
 use crate::srvpru::Room;
+use crate::srvpru::SOCKET_SERVER;
 use crate::srvpru::i18n;
-use crate::srvpru::server::Server;
-use crate::srvpru::server::SOCKET_SERVER;
-
+use crate::srvpru::Server;
+use crate::srvpru::get_server;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     init()?;
-    register();
+    register()?;
     setup();
     start().await;
     Ok(())
@@ -33,10 +33,11 @@ fn init() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn register() {
-    Player::register_handlers();
-    Room::register_handlers();
+fn register() -> anyhow::Result<()> {
+    Player::init()?;
+    Room::init()?;
     init_plugin_under_dir!("src/srvpru/plugins", process_plugin_result("#name", #name::init()));
+    Ok(())
 }
 
 fn setup() {
@@ -49,7 +50,7 @@ fn setup() {
 }
 
 async fn start() {
-    SOCKET_SERVER.get().unwrap().start().await.expect("Failed to start socket server");
+    get_server().start().await.expect("Failed to start socket server");
     error!("Terminated server. Srvpru is going to down.");
 }
 

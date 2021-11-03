@@ -7,12 +7,13 @@ use once_cell::sync::OnceCell;
 use tokio::net::tcp::OwnedWriteHalf;
 use tokio::task::JoinHandle;
 
+use crate::ygopro::message;
+use crate::ygopro::message::srvpru;
+use crate::ygopro::message::Struct;
+use crate::ygopro::message::MappedStruct;
+
 use crate::srvpru::processor::*;
 use crate::srvpru::player::*;
-use crate::srvpru::structs;
-use crate::ygopro::message;
-use crate::ygopro::message::MappedStruct;
-use crate::ygopro::message::Struct;
 
 pub static SOCKET_SERVER: OnceCell<Server> = OnceCell::new();
 
@@ -44,6 +45,7 @@ impl Server {
         Server::register_directional_handlers("ctos",     ctos_handlers,     &mut self.ctos_processor);
         Server::register_directional_handlers("stoc",     stoc_handlers,     &mut self.stoc_processor);
         Server::register_directional_handlers("internal", internal_handlers, &mut self.internal_processor);
+        Server::check_plugin_dependency(plugins, ctos_handlers, stoc_handlers, internal_handlers);
         self.register_plugin_handlers(plugins);
         self.ctos_processor.prepare();
         self.stoc_processor.prepare();
@@ -64,11 +66,28 @@ impl Server {
         let mut handlers_library = HANDLER_LIBRARY_BY_PLUGIN.write();
         for plugin_name in plugin_names.iter() {
             if let Some(mut library) = handlers_library.remove(*plugin_name) {
-                if let Some(handlers) = library.remove(&message::Direction::CTOS)   { Server::register_directional_handlers("ctos",     &handlers, &mut self.ctos_processor); }
-                if let Some(handlers) = library.remove(&message::Direction::STOC)   { Server::register_directional_handlers("stoc",     &handlers, &mut self.stoc_processor); }
-                if let Some(handlers) = library.remove(&message::Direction::SRVPRU) { Server::register_directional_handlers("internal", &handlers, &mut self.internal_processor); }
+                if let Some(handlers) = library.remove(&message::Direction::CTOS)   { Server::register_directional_handlers("ctos",     &handlers.iter().map(|s| s as &str).collect::<Vec<&str>>(), &mut self.ctos_processor); }
+                if let Some(handlers) = library.remove(&message::Direction::STOC)   { Server::register_directional_handlers("stoc",     &handlers.iter().map(|s| s as &str).collect::<Vec<&str>>(), &mut self.stoc_processor); }
+                if let Some(handlers) = library.remove(&message::Direction::SRVPRU) { Server::register_directional_handlers("internal", &handlers.iter().map(|s| s as &str).collect::<Vec<&str>>(), &mut self.internal_processor); }
             }
             else { warn!("No plugin named {}", plugin_name); }
+        }
+    }
+
+    fn check_plugin_dependency(plugins: &[&str], ctos_handlers: &[&str], stoc_handlers: &[&str], internal_handlers: &[&str]) {
+        let mut handlers = plugins.to_vec();
+        handlers.extend(ctos_handlers.iter());
+        handlers.extend(stoc_handlers.iter());
+        handlers.extend(internal_handlers.iter());
+        let handler_depnedencies = HANDLER_DEPENDENCIES.read();
+        for handler in handlers.iter() {
+            if ! handler_depnedencies.contains_key(*handler) { continue; }
+            let dependencies = handler_depnedencies.get(*handler).unwrap();
+            for dependency in dependencies.iter() {
+                if !handlers.contains(dependency) {
+                    warn!("Plugin {} need plugin {} as dependency, but it's not registered.", handler, dependency);
+                }
+            }
         }
     }
 
@@ -88,7 +107,8 @@ impl Server {
                     let data = match tokio::time::timeout(timeout, reader.read(&mut buf)).await {
                         Ok(data) => data,
                         Err(_) => {
-                            self.trigger_internal(&addr, structs::CtosProcessError { error: ProcessorError::Timeout }).await.ok();
+                            if Player::get_player(addr).map(|player| player.lock().timeout_exempt) == Some(true) { continue; }
+                            self.trigger_internal(&addr, srvpru::CtosListenError { error: ListenError::Timeout }).await.ok();
                             break;
                         }
                     };
@@ -96,20 +116,20 @@ impl Server {
                         Ok(n) if n == 0 => break,
                         Ok(n) => n,
                         Err(e) => {
-                            error!("Error on listening to client {:}: {}", &addr, e);
+                            self.trigger_internal(&addr, srvpru::CtosListenError { error: ListenError::Drop(anyhow::Error::new(e)) }).await.ok();
                             break
                         }
                     };
                     if n > 10240 { 
-                        self.trigger_internal(&addr, structs::CtosProcessError { error: ProcessorError::Oversize }).await.ok();
+                        self.trigger_internal(&addr, srvpru::CtosProcessError { error: ProcessorError::Oversize }).await.ok();
                         continue; 
                     }
-                    let result = if let Some(player) = Player::get_player(&addr) {
+                    let result = if let Some(player) = Player::get_player(addr) {
                         // Steal the socket, so that player won't be locked.
                         let mut socket = player.lock().server_stream_writer.take();
                         let res = server.ctos_processor.process_multiple_messages(&mut socket, &addr, &buf[0..n]).await;
                         // return the socket, player or socket both may disappear.
-                        if let (Some(player), Some(_socket)) = (Player::get_player(&addr), socket) {
+                        if let (Some(player), Some(_socket)) = (Player::get_player(addr), socket) {
                             player.lock().server_stream_writer.replace(_socket);
                         }
                         res
@@ -120,8 +140,8 @@ impl Server {
                     // Some process happen an error
                     if let Err(error) = result {
                         let break_user = match error { ProcessorError::Abort => true, _ => false };
-                        self.trigger_internal(&addr, structs::CtosProcessError { error }).await.ok();
-                        if break_user { break; }
+                        self.trigger_internal(&addr, srvpru::CtosProcessError { error }).await.ok();
+                        if break_user { Player::get_player(addr).map(|player| player.lock().expel()); break; }
                     }
                 };
                 // Out of loop, Drop that player
@@ -129,7 +149,7 @@ impl Server {
                     let player = { PLAYERS.write().remove(&addr) };
                     if let Some(player) = player {
                         let player_for_termination = player.clone();
-                        self.trigger_internal(&addr, structs::PlayerDestroy { player: player_for_termination });
+                        self.trigger_internal(&addr, srvpru::PlayerDestroy { player: player_for_termination }).await.ok();
                         if Arc::strong_count(&player) > 4 {
                             let player = player.lock();
                             warn!("Player {} seems still exist reference when drop. This may lead to memory leak.", player);
@@ -147,15 +167,14 @@ impl Server {
         tokio::spawn( async move {
             let result = self.internal_processor.process_request(&mut writer, &addr, Some(S::message()), &buf, Some(Box::new(obj))).await;
             if let Err(error) = result {
-                self.trigger_internal(&addr, structs::InternalProcessError { error }).await.ok();
+                self.trigger_internal(&addr, srvpru::InternalProcessError { error }).await.ok();
             }
         })
     }
 }
 
 pub fn trigger_internal<S: Struct + MappedStruct>(addr: SocketAddr, obj: S) -> JoinHandle<()> {
-    let socket_server = SOCKET_SERVER.get().unwrap();
-    socket_server.trigger_internal(&addr, obj)
+    get_server().trigger_internal(&addr, obj)
 }
 
 impl std::fmt::Display for Server {
@@ -179,4 +198,8 @@ impl std::fmt::Display for Server {
         }
         Ok(())
     }
+}
+
+pub fn get_server() -> &'static Server {
+    SOCKET_SERVER.get().expect("Socket server not set")
 }

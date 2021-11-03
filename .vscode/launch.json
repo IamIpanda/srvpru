@@ -10,7 +10,7 @@
             "name": "Debug executable 'srvpru'",
             "program": "${workspaceRoot}/target/debug/srvpru",
             "cwd": "${workspaceFolder}",
-            "env": { "RUST_LOG": "trace" },
+            "env": { "RUST_LOG": "srvpru", "SRVPRU_CONFIG_PATH": "${workspaceRoot}/config" },
             "terminal": "integrated",
             "sourceLanguages": ["rust"],
             "preLaunchTask": "Build"
