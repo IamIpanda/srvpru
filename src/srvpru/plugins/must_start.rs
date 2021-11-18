@@ -86,7 +86,7 @@ fn register_handlers() {
         Ok(false)
     })).register();
 
-    Handler::follow_message(100, "must_start_game_not_ready", |context, _: &ctos::HsNotReady| Box::pin(async move {
+    Handler::before_message(100, "must_start_game_not_ready", |context, _: &ctos::HsNotReady| Box::pin(async move {
         get_player_attachment_sure(context).ready = false;
         let mut room_attachment = get_room_attachment_sure(context);
         if let Some(handle) = room_attachment.start_game_watcher.take() {
@@ -95,7 +95,7 @@ fn register_handlers() {
         Ok(false)
     })).register();
 
-    Handler::follow_message(254, "must_start_game_started", |context, _: &ctos::HsStart| Box::pin(async move {
+    Handler::before_message(254, "must_start_game_started", |context, _: &ctos::HsStart| Box::pin(async move {
         let mut room_attachment = get_room_attachment_sure(context);
         if let Some(handler) = room_attachment.start_game_watcher.take() {
             handler.abort();

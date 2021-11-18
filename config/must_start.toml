@@ -1,2 +1,2 @@
-start_game = [5]
+start_game = [30, 15, 5]
 change_side = 1

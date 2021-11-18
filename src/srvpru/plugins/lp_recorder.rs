@@ -26,7 +26,7 @@ pub fn init() -> anyhow::Result<()> {
 }
 
 fn register_handlers() {
-    Handler::follow_message::<stoc::DuelStart, _>(100, "lp_recorder_start", |context, _| Box::pin(async move {
+    Handler::before_message::<stoc::DuelStart, _>(100, "lp_recorder_start", |context, _| Box::pin(async move {
         let room = context.get_room().ok_or(anyhow!("Can't get the room"))?;
         get_player_attachment_sure(context).lp = room.lock().host_info.start_lp as i32;
         Ok(false)
@@ -35,7 +35,7 @@ fn register_handlers() {
     srvpru_handler!(gm::Damage, get_player_attachment_sure, |context, request| {
         if context.get_position() != request.player { return Ok(false); }
         attachment.lp = attachment.lp - request.value;
-        srvpru::server::trigger_internal(*context.addr, LpChange { player: context.get_player().ok_or(anyhow!("Can't get player"))?, lp: attachment.lp});
+        srvpru::server::trigger_internal(*context.addr, LpChange { player: context.get_player().ok_or(anyhow!("Can't get player"))?, lp: attachment.lp}).await;
     }).register_as("lp_recorder_damage");
 
     srvpru_handler!(gm::Recover, get_player_attachment_sure, |context, request| {

@@ -191,8 +191,8 @@ impl Room {
             while let Result::Ok(Some(line)) = lines.next_line().await {
                 warn!("stderr from ygopro server {}", line)
             }
-            server::trigger_internal(addr, crate::ygopro::message::srvpru::RoomDestroy { room: room.clone() }).await.ok();
-            if Arc::strong_count(&room) > 4 {
+            server::trigger_internal(addr, crate::ygopro::message::srvpru::RoomDestroy { room: room.clone() }).await;
+            if Arc::strong_count(&room) > 2 + room.lock().players.len() {
                 let room = room.lock();
                 warn!("Room {} seems still exist reference when drop. This may lead to memory leak.", room.name);
             }
@@ -271,7 +271,7 @@ impl Room {
         }
         let addr = { room.lock().server_addr.clone().unwrap() };
         let room_for_message = room.clone();
-        server::trigger_internal(addr, crate::ygopro::message::srvpru::RoomCreated { room: room_for_message }); 
+        server::trigger_internal_async(addr, crate::ygopro::message::srvpru::RoomCreated { room: room_for_message }); 
         room
     }
 
@@ -297,7 +297,7 @@ impl Room {
     }
 
     pub fn register_handlers() {
-        Handler::follow_message::<ctos::JoinGame, _>(10, "room_producer", |context, request| Box::pin(async move { 
+        Handler::before_message::<ctos::JoinGame, _>(10, "room_producer", |context, request| Box::pin(async move { 
             let password = context.get_string(&request.pass, "pass")?;
             let room = Room::get_or_create_by_name(password).await;
             let socket = context.socket.take().ok_or(anyhow!("Socket already taken."))?;
@@ -305,7 +305,7 @@ impl Room {
             Ok(false)
         })).register();
 
-        Handler::follow_message::<srvpru::RoomDestroy, _>(100, "room_dropper", |_, request| Box::pin(async move {
+        Handler::before_message::<srvpru::RoomDestroy, _>(255, "room_dropper", |_, request| Box::pin(async move {
             Room::destroy(&request.room);
             Ok(false)
         })).register();
@@ -387,7 +387,7 @@ macro_rules! room_attach {
         #[allow(dead_code)]
         fn drop_room_attachment(room_destroy: &crate::ygopro::message::srvpru::RoomDestroy) -> Option<RoomAttachment> {
             let room = room_destroy.room.lock();
-            let name = &room.name;
+            let name = &room.origin_name;
             ROOM_ATTACHMENTS.write().remove(name)
         }
 

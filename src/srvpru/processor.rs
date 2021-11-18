@@ -16,11 +16,19 @@ use crate::ygopro::message::try_get_message_type;
 use crate::ygopro::message::deserialize_struct_by_type;
 
 pub struct Handler {
-    pub name: String,
-    pub priority: u8,
-    pub owner: Option<String>,
-    pub condition: HandlerCondition,
-    pub execution: Box<dyn for <'a, 'b> Fn(&'b mut Context<'a>) -> Pin<Box<dyn Future<Output = Result<bool>> + Send + 'b>> + Send + Sync>
+    name: String,
+    priority: u8,
+    owner: Option<String>,
+    condition: HandlerCondition,
+    occasion: HandlerOccasion,
+    execution: Box<dyn for <'a, 'b> Fn(&'b mut Context<'a>) -> Pin<Box<dyn Future<Output = Result<bool>> + Send + 'b>> + Send + Sync>
+}
+
+pub enum HandlerOccasion {
+    Before,
+    After,
+    #[allow(dead_code)]
+    Never
 }
 
 pub enum HandlerCondition {
@@ -33,20 +41,38 @@ pub enum HandlerCondition {
 }
 
 impl Handler {
-    pub fn new<F1, F2>(priority: u8, name: &str, condition: F1, execution: F2) -> Handler
-    where F1: for<'a, 'b> Fn(&'b mut Context<'a>) -> bool,
-          F1: Send + Sync + 'static,
-          F2: for<'a, 'b> Fn(&'b mut Context<'a>) -> Pin<Box<dyn Future<Output = Result<bool>> + Send + 'b>> + Copy,
-          F2: Send + Sync + 'static {
+    pub fn new<F>(priority: u8, name: &str, occasion: HandlerOccasion, condition: HandlerCondition, execution: F) -> Handler
+    where F: for<'a, 'b> Fn(&'b mut Context<'a>) -> Pin<Box<dyn Future<Output = Result<bool>> + Send + 'b>> + Copy,
+          F: Send + Sync + 'static {
         Handler {
             name: name.to_string(),
             priority,
             owner: None,
-            condition: HandlerCondition::Dynamic(Box::new(condition)),
+            occasion,
+            condition,
             execution: Box::new(execution)
         }
     }
 
+    /// Create a handler, execute code before it send to server.
+    pub fn before_message<S, F>(priority: u8, name: &str, execution: F) -> Handler 
+    where S: Struct + MappedStruct,
+          F: for<'a, 'b> Fn(&'b mut Context<'a>, &'b S) -> Pin<Box<dyn Future<Output = Result<bool>> + Send + 'b>> + Copy,
+          F: Send + Sync + 'static {
+        Handler {
+            name: name.to_string(),
+            priority,
+            owner: None,
+            occasion: HandlerOccasion::Before,
+            condition: HandlerCondition::MessageType(S::message()),
+            execution: Box::new(move |context| Box::pin(Handler::typed_execute::<S, F>(context, execution)))
+        }
+    }
+
+    /// Create a handler, execute code after message send to server.  
+    /// Response in context will be discarded.  
+    /// Error/Abort still will take effect.  
+    /// If an Error/Abort happened on before_message handler, all follow-message handlers will be skipped.
     pub fn follow_message<S, F>(priority: u8, name: &str, execution: F) -> Handler 
     where S: Struct + MappedStruct,
           F: for<'a, 'b> Fn(&'b mut Context<'a>, &'b S) -> Pin<Box<dyn Future<Output = Result<bool>> + Send + 'b>> + Copy,
@@ -55,12 +81,13 @@ impl Handler {
             name: name.to_string(),
             priority,
             owner: None,
+            occasion: HandlerOccasion::After,
             condition: HandlerCondition::MessageType(S::message()),
             execution: Box::new(move |context| Box::pin(Handler::typed_execute::<S, F>(context, execution)))
         }
     }
 
-
+    #[doc(hidden)]
     async fn typed_execute<'c, 'd, S, F>(context: &'d mut Context<'c>, execution: F) -> Result<bool>
     where S: Struct,
         F: for<'a, 'b> Fn(&'b mut Context<'a>, &'b S) -> Pin<Box<dyn Future<Output = Result<bool>> + Send + 'b>>,
@@ -139,15 +166,18 @@ pub struct Context<'a> {
     pub request_buffer: &'a [u8],
 
     pub direction: Direction,
+    pub occasion: HandlerOccasion,
+
     pub message_type: Option<MessageType>,
-    pub request: Option<Box<dyn Struct>>,
+    pub request: &'a mut Option<Box<dyn Struct>>,
     pub response: Option<Box<dyn Struct>>,
     pub parameters: HashMap<String, String>,
 }
 
 pub struct Processor {
-    pub direction: Direction,
-    pub handlers: Vec<Handler>,
+    direction: Direction,
+    before_handlers: Vec<Handler>,
+    after_handlers: Vec<Handler>
 }
 
 pub enum ResponseData<'a> {
@@ -194,21 +224,29 @@ impl core::convert::From<anyhow::Error> for ProcessorError {
 }
 
 impl Processor {
+    pub fn new(direction: Direction) -> Processor {
+        Processor { direction, before_handlers: Vec::new(), after_handlers: Vec::new() }
+    }
+
     pub async fn process_multiple_messages<'a>(&self, socket: &mut Option<tokio::net::tcp::OwnedWriteHalf>, addr: &'a SocketAddr, data: &'a [u8]) -> core::result::Result<(), ProcessorError> {
         let mut rest_data = data;
         let mut count = 0;
-        let mut responses: Vec<ResponseData<'a>> = Vec::new();
+        let mut requests = Vec::new();
+        let mut responses = Vec::new();
         let mut no_change = true;
         while rest_data.len() > 0 {
             if rest_data.len() < 2 { Err(ProcessorError::BufferLength)?; } 
             else if rest_data.len() < 3 { Err(ProcessorError::ProtoLength)?; }
             let length: u16 = rest_data[0] as u16 + rest_data[1] as u16 * 256;
             if rest_data.len() < 2 + length as usize { Err(ProcessorError::MessageLength)?; }
-            let child_data = &rest_data[0..(2 + length) as usize];
-
-            let current_data = self.process_message(socket, addr, child_data).await?;
-            no_change = no_change && matches!(current_data, ResponseData::Reference(_));
-            responses.push(current_data);
+            let request_buffer = &rest_data[0..(2 + length) as usize];
+            let raw_data = &request_buffer[3..];
+            let message_type = try_get_message_type(self.direction, request_buffer[2]);
+            let mut request = message_type.map(|_type| deserialize_struct_by_type(_type, &raw_data)).flatten();
+            let response_data = self.process_request(socket, addr, message_type, HandlerOccasion::Before, request_buffer, &mut request).await?;
+            no_change = no_change && matches!(response_data, ResponseData::Reference(_));
+            requests.push((message_type, request_buffer, request));
+            responses.push(response_data);
             count += 1;
             if count > 1000 { Err(ProcessorError::Oversize)?; }
             rest_data = &rest_data[(2 + length) as usize..]
@@ -232,22 +270,13 @@ impl Processor {
             }
         }
         else { trace!("    Socket taken.") }
+        for (message_type, request_buffer, mut request) in requests.into_iter() {
+            self.process_request(socket, addr, message_type, HandlerOccasion::After, request_buffer, &mut request).await?;
+        }
         Ok(())
     }
 
-    async fn process_message<'a>(&self, socket: &mut Option<tokio::net::tcp::OwnedWriteHalf>, addr: &'a SocketAddr, request_buffer: &'a [u8]) -> core::result::Result<ResponseData<'a>, ProcessorError> {
-        // read header
-        let message_type = try_get_message_type(self.direction, request_buffer[2]);
-        let data = &request_buffer[3..];
-        // deserialize item
-        let request = match message_type {
-            Some(actual_message_type) => deserialize_struct_by_type(actual_message_type, &data),
-            Option::None => Option::None
-        };
-        self.process_request(socket, addr, message_type, request_buffer, request).await
-    }
-
-    pub async fn process_request<'a>(&self, socket: &mut Option<tokio::net::tcp::OwnedWriteHalf>, addr: &'a SocketAddr, message_type: Option<MessageType>, request_buffer: &'a [u8], request: Option<Box<dyn Struct>>) -> core::result::Result<ResponseData<'a>, ProcessorError> {
+    pub async fn process_request<'a>(&self, socket: &mut Option<tokio::net::tcp::OwnedWriteHalf>, addr: &'a SocketAddr, message_type: Option<MessageType>, occasion: HandlerOccasion, request_buffer: &'a [u8], request: &mut Option<Box<dyn Struct>>) -> core::result::Result<ResponseData<'a>, ProcessorError> {
         // create context
         let response = Option::None;
         let parameters = HashMap::new();
@@ -258,6 +287,7 @@ impl Processor {
             request_buffer,
             message_type,
             request,
+            occasion,
             response,
             parameters
         };
@@ -266,13 +296,18 @@ impl Processor {
 
         // Game message add on
         if !interrupted && context.message_type == Some(MessageType::STOC(stoc::MessageType::GameMessage)) {
-            if let Some(game_message_general) = context.request {
+            if let Some(game_message_general) = context.request.take() {
                 let option_game_message = game_message_general.downcast::<stoc::GameMessage>();
-                if let Ok(game_message) = option_game_message {
+                if let Ok(mut game_message) = option_game_message {
+                    let child_struct = game_message.message;
                     context.message_type = Some(MessageType::GM(game_message.kind));
-                    context.request = Some(game_message.message);
+                    context.request.replace(child_struct);
                     // Once more, that's ugly
                     interrupted = self.process_context(&mut context).await?;
+                    if let Some(message) = context.request.take() {
+                        game_message.message = message;
+                        context.request.replace(game_message);
+                    }
                 }
             }
         }
@@ -287,14 +322,19 @@ impl Processor {
                 else { Ok(ResponseData::Skip) }
             },
             None => if interrupted {
-                trace!("    Message is blocked.");
+                debug!("    Message is blocked.");
                 Ok(ResponseData::Skip)
             } else { Ok(ResponseData::Reference(request_buffer)) },
         } 
     }
 
     async fn process_context<'a>(&self, context: &mut Context<'a>) -> core::result::Result<bool, ProcessorError> {
-        for _handler in &self.handlers {
+        let handlers = match context.occasion {
+            HandlerOccasion::Before => &self.before_handlers,
+            HandlerOccasion::After => &self.after_handlers,
+            HandlerOccasion::Never => return Ok(false),
+        };
+        for _handler in handlers {
             if _handler.condition.meet(context) {
                 trace!("    processing {:}", _handler.name);
                 if (*_handler.execution)(context).await.map_err::<ProcessorError, _>(|err| err.into())? {
@@ -305,7 +345,28 @@ impl Processor {
         Ok(false)
     }
 
+    pub fn add_handler(&mut self, handler: Handler) {
+        match handler.occasion {
+            HandlerOccasion::Before => self.before_handlers.push(handler),
+            HandlerOccasion::After => self.after_handlers.push(handler),
+            HandlerOccasion::Never => {},
+        }
+    }
+
     pub fn prepare(&mut self) {
-        self.handlers.sort_by_key(|handler| handler.priority)
+        self.before_handlers.sort_by_key(|handler| handler.priority);
+        self.after_handlers.sort_by_key(|handler| handler.priority);
+    }
+}
+
+impl std::fmt::Display for Processor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for processor in self.before_handlers.iter() {
+            writeln!(f, "    {:}", processor)?;
+        }
+        for processor in self.after_handlers.iter() {
+            writeln!(f, "    {:}", processor)?;
+        }
+        Ok(())
     }
 }

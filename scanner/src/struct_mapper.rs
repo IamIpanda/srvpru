@@ -10,6 +10,45 @@ pub fn gm(_: TokenStream, input: TokenStream) -> TokenStream { return input; }
 pub fn srvpru(_: TokenStream, input: TokenStream) -> TokenStream { return input; }
 
 
+#[proc_macro_derive(Struct)]
+pub fn ygopro_struct(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let struct_ident = input.ident;
+    let struct_name = struct_ident.to_string();
+    let attributes = input.attrs;
+    let _type = match struct_name {
+        _ if struct_name.starts_with("CTOS") => "CTOS",
+        _ if struct_name.starts_with("STOC") => "STOC",
+        _ if struct_name.starts_with("SRVPRU") => "SRVPRU",
+        _ if struct_name.starts_with("GM") => "GM",
+        _ if attributes.iter().any(|attribtue| attribtue.path.is_ident("ctos")) => "CTOS",
+        _ if attributes.iter().any(|attribtue| attribtue.path.is_ident("stoc")) => "STOC",
+        _ if attributes.iter().any(|attribtue| attribtue.path.is_ident("srvpru")) => "SRVPRU",
+        _ if attributes.iter().any(|attribtue| attribtue.path.is_ident("game_message") || attribtue.path.is_ident("gm")) => "GM",
+        _ => "_"
+    };
+    let enum_name = if struct_name.starts_with(_type) { &struct_name[_type.len()..] } else { struct_name.as_str() };
+    let type_ident = quote::format_ident!("{}", _type);
+    let enum_class_ident = quote::format_ident!("MessageType");
+    let enum_ident = quote::format_ident!("{}", enum_name);
+    let mapped_response = if _type == "_" {
+        quote!(generate_message_type(#enum_class_ident::#enum_ident))
+    } 
+    else {
+        quote!(crate::ygopro::message::MessageType::#type_ident(#enum_class_ident::#enum_ident))
+    };
+        
+    let expand = quote! {
+        impl crate::ygopro::message::Struct for #struct_ident {}
+        impl crate::ygopro::message::MappedStruct for #struct_ident {
+            fn message() -> crate::ygopro::message::MessageType {
+                return #mapped_response;
+            }
+        }
+    };
+    TokenStream::from(expand)
+}
+
 // ===========================================
 // srvpru_handler!(CTOSMessageType::xxxxx, |context| { false });
 // srvpru_handler!(CTOSJoinGame, |context| { });
@@ -71,12 +110,12 @@ pub fn srvpru_handler(input: TokenStream) -> TokenStream {
         let direction = quote::format_ident!("{}", name[0..name.find("::MessageType").unwrap()].to_string().to_uppercase());
         quote!(crate::ygopro::message::MessageType::#direction(#name_path)) 
     } else { quote!(#name_path::message()) };
-    let handler_condition = if is_always_trigger { quote! { |_| true } } else { quote!{|context| context.message_type == Some(#message_type) } };
+    let handler_condition = if is_always_trigger { quote! { crate::srvpru::HandlerCondition::Always } } else { quote!{crate::srvpru::HandlerCondition::MessageType(#message_type) } };
     let extra_return = if can_add_return_in_last(&block_body) { quote!{ return Ok(false); } } else { quote!() };
 
     let expand = if is_enum {
         quote!(
-            crate::srvpru::Handler::new(#priority_ident, "", #handler_condition, |#block_inputs| Box::pin(async move {
+            crate::srvpru::Handler::new(#priority_ident, "", crate::srvpru::HandlerOccasion::Before, #handler_condition, |#block_inputs| Box::pin(async move {
                 #attachment_statement
                 #block_body
                 #extra_return
@@ -84,7 +123,7 @@ pub fn srvpru_handler(input: TokenStream) -> TokenStream {
         )
     } else {
         quote!(
-            crate::srvpru::Handler::follow_message::<#name_path, _>(#priority_ident, "", |#block_inputs| Box::pin(async move {
+            crate::srvpru::Handler::before_message::<#name_path, _>(#priority_ident, "", |#block_inputs| Box::pin(async move {
                 #attachment_statement
                 #block_body
                 #extra_return

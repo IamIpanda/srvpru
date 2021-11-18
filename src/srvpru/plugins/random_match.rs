@@ -29,7 +29,7 @@ pub fn init() -> anyhow::Result<()> {
 }
 
 fn register_handlers() {
-    Handler::follow_message::<JoinGame, _>(9, "random_matcher_join_game", |context, request| Box::pin(async move { 
+    Handler::before_message::<JoinGame, _>(9, "random_matcher_join_game", |context, request| Box::pin(async move { 
         let mut password = context.get_string(&request.pass, "pass")?.clone();
         if password == "" { password = "M".to_string(); }
         let mode = match password.as_str() {
@@ -63,13 +63,13 @@ fn register_handlers() {
         return Ok(true);
     })).register();
 
-    Handler::follow_message::<DuelStart, _>(9, "random_matcher_dropper_on_duel_start", |context, _| Box::pin(async move {
+    Handler::before_message::<DuelStart, _>(9, "random_matcher_dropper_on_duel_start", |context, _| Box::pin(async move {
         let room = context.get_room().ok_or(anyhow!("Cannot get room"))?;
         remove_room_from_pool(&room);
         Ok(false)
     })).register();
 
-    Handler::follow_message::<RoomDestroy, _>(9, "random_matcher_dropper_on_room_termination", |_, request| Box::pin(async move {
+    Handler::before_message::<RoomDestroy, _>(9, "random_matcher_dropper_on_room_termination", |_, request| Box::pin(async move {
         remove_room_from_pool(&request.room);
         Ok(false)
     })).register();

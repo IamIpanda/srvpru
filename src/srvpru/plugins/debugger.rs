@@ -6,10 +6,12 @@
 
 use crate::ygopro::message;
 use crate::ygopro::message::srvpru;
-use crate::srvpru::processor::Handler;
+use crate::srvpru::Handler;
+use crate::srvpru::HandlerOccasion;
+use crate::srvpru::HandlerCondition;
 
 pub fn register_handlers() {
-    Handler::new(0, "ctos_debugger", |_| true, |context| Box::pin(async move {
+    Handler::new(0, "ctos_debugger", HandlerOccasion::Before, HandlerCondition::Always, |context| Box::pin(async move {
         let room = context.get_room();
         let text = if let Some(room) = room {
             format!("[{:}]", room.lock().server_addr.unwrap())
@@ -19,17 +21,18 @@ pub fn register_handlers() {
         Ok(false)
     })).register();
 
-    Handler::new(0, "stoc_debugger", |_| true, |context| Box::pin(async move {
+    Handler::new(0, "stoc_debugger", HandlerOccasion::Before, HandlerCondition::Always, |context| Box::pin(async move {
         let room = context.get_room();
         let text = if let Some(room) = room {
             format!("[{:}]", room.lock().server_addr.unwrap())
         } 
         else { "[ - ]".to_string() };
         debug!("STOC Message   [{:}] <- {:} {:?}", context.addr, text, context.message_type.as_ref().unwrap());
+        trace!("{:?}", context.request);
         Ok(false)
     })).register();
 
-    Handler::new(0, "internal_debugger", |_| true, |context| Box::pin(async move {
+    Handler::new(0, "internal_debugger", HandlerOccasion::Before, HandlerCondition::Always, |context| Box::pin(async move {
         debug!("SRVPRU Message [{:}] -- {:?}", context.addr, context.message_type.as_ref().unwrap());
         if context.message_type == Some(message::MessageType::SRVPRU(srvpru::MessageType::CtosProcessError)) {
             debug!("CTOS ERROR - {:?}", context.cast_request_to_type::<srvpru::CtosProcessError>().unwrap().error);

@@ -128,7 +128,7 @@ pub struct Chat {
 // #[stoc]
 pub struct HsPlayerEnter {
     pub name: [u16; 20],
-    pub pos: u8 
+    pub pos: Netplayer 
 }
 
 #[derive(Serialize, Deserialize, Debug, Struct)]

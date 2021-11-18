@@ -24,7 +24,7 @@ pub fn init() -> anyhow::Result<()> {
 pub fn register_handlers() {
     let configuration = get_configuration();
 
-    Handler::follow_message::<JoinGame, _>(2, "version_checker",  move |context, request| Box::pin(async move {
+    Handler::before_message::<JoinGame, _>(2, "version_checker",  move |context, request| Box::pin(async move {
         if request.version < configuration.version {
             context.send(&generate_chat("{outdated_client}", Colors::Red, context.get_region())).await?;
             Err(ProcessorError::Abort)?;

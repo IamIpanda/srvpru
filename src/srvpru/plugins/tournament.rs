@@ -47,7 +47,7 @@ impl std::default::Default for TournamentState {
 }
 
 fn register_handlers() { 
-    Handler::follow_message::<ctos::HsStart, _>(100, "tournament_duel_start", |context, _| Box::pin(async move {
+    Handler::before_message::<ctos::HsStart, _>(100, "tournament_duel_start", |context, _| Box::pin(async move {
         let mut attachment = get_room_attachment_sure(context);
         let room = context.get_room().ok_or(anyhow!("Can't find room."))?;
         attachment.countdown = Some(tokio::spawn(async move {
@@ -62,7 +62,7 @@ fn register_handlers() {
         Ok(false)
     })).register();
 
-    Handler::follow_message::<gm::NewTurn, _>(100, "tournament_death_move", |context, _| Box::pin(async move {
+    Handler::before_message::<gm::NewTurn, _>(100, "tournament_death_move", |context, _| Box::pin(async move {
         let mut attachment = get_room_attachment_sure(context);
         if let TournamentState::Death(remain_turn) = attachment.tournament_state {
             if remain_turn - 1 <= 0 {
@@ -80,7 +80,7 @@ fn register_handlers() {
         Ok(false)
     })).register();
 
-    Handler::follow_message::<gm::Lpupdate, _>(100, "tournament_sudden_death", |context, _| Box::pin(async move {
+    Handler::before_message::<gm::Lpupdate, _>(100, "tournament_sudden_death", |context, _| Box::pin(async move {
         let attachment = get_room_attachment_sure(context);
         if attachment.tournament_state == TournamentState::Sudden {
             let room = context.get_room().ok_or(anyhow!("Cannot get the room"))?;
@@ -89,7 +89,7 @@ fn register_handlers() {
         Ok(false)
     })).register();
 
-    Handler::follow_message::<srvpru::RoomDestroy, _>(100, "tournament_room_attachment_dropper", |_, request| Box::pin(async move {
+    Handler::before_message::<srvpru::RoomDestroy, _>(100, "tournament_room_attachment_dropper", |_, request| Box::pin(async move {
         let attachment = drop_room_attachment(request);
         if let Some(attachment) = attachment {
             if let Some(countdown) = attachment.countdown {

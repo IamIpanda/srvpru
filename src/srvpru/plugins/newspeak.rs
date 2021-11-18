@@ -14,6 +14,7 @@ use crate::ygopro::message::Struct;
 use crate::ygopro::message::Direction;
 use crate::ygopro::message::ctos::Chat;
 use crate::ygopro::message::ctos::JoinGame;
+use crate::ygopro::message::stoc::HsPlayerEnter;
 
 use crate::srvpru::Context;
 use crate::srvpru::Handler;
@@ -41,7 +42,9 @@ pub enum BadwordBehavior {
     /// Replace sensitive words with *, and send a warning.
     Replace,
     /// Block that message, but sender will see it as normal.
-    Silent
+    Silent,
+    /// Do nothing.
+    None
 }
 
 pub fn init() -> anyhow::Result<()>  {
@@ -51,7 +54,7 @@ pub fn init() -> anyhow::Result<()>  {
 }
 
 fn register_handlers() {
-    Handler::follow_message::<Chat, _>(101, "newspeak_chat", |context, request| Box::pin(async move {
+    Handler::before_message::<Chat, _>(101, "newspeak_chat", |context, request| Box::pin(async move {
         let configuration = get_configuration();
         let mut message = context.get_string(&request.msg, "message")?.clone();
         let level = judge_bad_word_level(&mut message);
@@ -90,16 +93,17 @@ fn register_handlers() {
                     }
                     return Ok(true);
                 },
+                BadwordBehavior::None => {},
             }
         }
         Ok(false)
     })).register();
 
-    Handler::follow_message::<PlayerInfo, _>(2, "newspeak_player_name", |context, request| Box::pin(async move {
+    Handler::before_message::<PlayerInfo, _>(1, "newspeak_player_name", |context, request| Box::pin(async move {
         let name = context.get_string(&request.name, "name")?;
         let level = judge_bad_word_level(name);
         let configuration = get_configuration();
-        if level > 0 {
+        if level >= 0 {
             match configuration.behavior[level as usize] {
                 BadwordBehavior::Block => {
                     context.send(&struct_sequence![
@@ -109,13 +113,14 @@ fn register_handlers() {
                     Err(ProcessorError::Abort)?;
                 },
                 BadwordBehavior::Replace => context.response = Some(Box::new(PlayerInfo { name: cast_to_fix_length_array(name) })),
-                BadwordBehavior::Silent => *name = "*******".to_string(),
+                BadwordBehavior::Silent => *name = "******".to_string(), // Block on STOC
+                BadwordBehavior::None => {}, 
             }
         }
         Ok(false)
     })).register();
 
-    Handler::follow_message::<JoinGame, _>(5, "newspeak_roomname", |context, request| Box::pin(async move {
+    Handler::before_message::<JoinGame, _>(5, "newspeak_roomname", |context, request| Box::pin(async move {
         let name = context.get_string(&request.pass, "pass")?;
         let level = judge_bad_word_level(name);
         let configuration = get_configuration();
@@ -135,12 +140,34 @@ fn register_handlers() {
                     pass: cast_to_fix_length_array(name)
                 })),
                 BadwordBehavior::Silent => *name = "illegal_room_name_".to_string() + &chrono::offset::Local::now().timestamp_millis().to_string(),
+                BadwordBehavior::None => {},
+            }
+        }
+        Ok(false)
+    })).register();
+
+    Handler::before_message(1, "newspeak_stoc_player_name", |context, request: &HsPlayerEnter| Box::pin(async move {
+        let name = context.get_string(&request.name, "name")?;
+        let level = judge_bad_word_level(name);
+        let configuration = get_configuration();
+        if level >= 0 {
+            match configuration.behavior[level as usize] {
+                BadwordBehavior::Block => {/* should be blocked by ctos */} 
+                BadwordBehavior::Replace => context.response = Some(Box::new(HsPlayerEnter { name: cast_to_fix_length_array(name), pos: request.pos })),
+                BadwordBehavior::Silent => {
+                    *name = "******".to_string();
+                    if request.pos != context.get_position() {
+                        context.response = Some(Box::new(HsPlayerEnter { name: cast_to_fix_length_array("******"), pos: request.pos }))
+                    }
+                },
+                BadwordBehavior::None => {},
             }
         }
         Ok(false)
     })).register();
 
     Handler::register_handlers("newspeak", Direction::CTOS, vec!["newspeak_chat", "newspeak_player_name", "newspeak_roomname"]);
+    Handler::register_handlers("newspeak", Direction::STOC, vec!["newspeak_stoc_player_name"]);
 }
 
 fn judge_bad_word_level(target: &mut String) -> i8 {

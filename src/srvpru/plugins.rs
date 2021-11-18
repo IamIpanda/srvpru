@@ -55,9 +55,12 @@ macro_rules! set_configuration {
         #[derive(serde::Deserialize, Debug)]
         pub struct Configuration {
             $($(#[$attr])* pub $field: $type,)*
-        } 
+        }
+
+        #[doc(hidden)]
         pub static CONFIGURATION: once_cell::sync::OnceCell<Configuration> = once_cell::sync::OnceCell::new();
 
+        #[doc(hidden)]
         pub fn load_configuration() -> anyhow::Result<()> {
             let os_module_name = std::path::Path::new(file!()).file_stem().ok_or(anyhow!("Can not determain module name."))?;
             let module_name = os_module_name.to_str().ok_or(anyhow!("Can not transform module name to utf-8"))?;
@@ -65,6 +68,7 @@ macro_rules! set_configuration {
             Ok(())
         }
 
+        /// Get configuration for current config.
         #[inline]
         pub fn get_configuration() -> &'static Configuration {
             CONFIGURATION.get().expect(&format!("{} configuration not set", file!()))
@@ -75,6 +79,7 @@ macro_rules! set_configuration {
 #[macro_export]
 macro_rules! depend_on {
     ($($field: literal),*) => {
+        #[doc(hidden)]
         fn register_dependency() -> anyhow::Result<()> {
             let os_module_name = std::path::Path::new(file!()).file_stem().ok_or(anyhow!("Can not determain module name."))?;
             let module_name = os_module_name.to_str().ok_or(anyhow!("Can not transform module name to utf-8"))?;

@@ -19,6 +19,8 @@ use tokio::task::JoinHandle;
 use tokio::io::AsyncReadExt;
 use parking_lot::Mutex;
 
+use crate::srvpru::HandlerCondition;
+use crate::srvpru::HandlerOccasion;
 use crate::srvpru::Player;
 use crate::srvpru::ProcessorError;
 use crate::srvpru::generate_chat;
@@ -30,9 +32,12 @@ use crate::srvpru::PlayerPrecursor;
 
 use crate::ygopro::Colors;
 use crate::ygopro::message::ctos;
+use crate::ygopro::message::stoc;
 use crate::ygopro::message::srvpru;
 use crate::ygopro::message::Direction;
 use crate::ygopro::message::MessageType;
+use crate::ygopro::message::stoc::HsPlayerChange;
+use crate::ygopro::message::stoc::HsWatchChange;
 use crate::ygopro::message::string::cast_to_fix_length_array;
 use crate::ygopro::message::generate::wrap_struct;
 use crate::ygopro::message::generate::wrap_mapped_struct;
@@ -77,7 +82,7 @@ fn register_handlers() {
         register_telescreen(addr, attachment.pointer.clone()).await?;
     }).register_as("telescreen_injector");
 
-    Handler::follow_message::<ctos::PlayerInfo, _>(9, "telescreen_blocker", |context, request| Box::pin(async move {
+    Handler::before_message::<ctos::PlayerInfo, _>(9, "telescreen_blocker", |context, request| Box::pin(async move {
         let name = context.get_string(&(request.name), "name")?;
         if name == TELESCREEN_NAME {
             context.send(&generate_chat("{bad_user_name}", Colors::Red, context.get_region())).await.ok();
@@ -86,7 +91,7 @@ fn register_handlers() {
         Ok(false)
     })).register();
     
-    Handler::follow_message::<ctos::JoinGame, _>(8, "telescreen_watcher", |context, request| Box::pin(async move {
+    Handler::before_message::<ctos::JoinGame, _>(8, "telescreen_watcher", |context, request| Box::pin(async move {
         let duel_stage = context.get_duel_stage_in_join_game(request);
         if duel_stage <= stage_recorder::DuelStage::Begin { return Ok(false) };
 
@@ -108,8 +113,27 @@ fn register_handlers() {
         Ok(true)
     })).register();
 
+    Handler::before_message(1, "telescreen_hider", |context, request: &stoc::HsPlayerEnter| Box::pin(async move {
+        if context.get_string(&request.name, "name")? == TELESCREEN_NAME {
+            return context.block_message();
+        }
+        Ok(false)
+    })).register();
+
+    Handler::before_message(1, "telescreen_hider2", |context, request: &stoc::HsPlayerChange| Box::pin(async move {
+        if request.status == 24 { return context.block_message(); }
+        Ok(false)
+    })).register();
+
+    Handler::before_message(1, "telescreen_hider3", |context, request: &stoc::HsWatchChange| Box::pin(async move {
+        let match_count = request.match_count - 1;
+        if match_count == 0 { return context.block_message(); }
+        context.response = Some(Box::new(HsWatchChange { match_count }));
+        Ok(false)
+    })).register();
+
     // Intercept all message except chat from 
-    Handler::new(1, "telescreen_message_interceptor", |context| context.message_type != Some(MessageType::CTOS(ctos::MessageType::Chat)), |context| Box::pin(async move {
+    Handler::new(1, "telescreen_message_interceptor", HandlerOccasion::Before, HandlerCondition::Dynamic(Box::new(|context| context.message_type != Some(MessageType::CTOS(ctos::MessageType::Chat)))), |context| Box::pin(async move {
         if let Some(telescreen) = get_room_attachment(context) {
             let _telescreen = telescreen.pointer.lock();
             if _telescreen.watchers.iter().any(|watcher| watcher.client_addr == *context.addr) {
@@ -120,7 +144,7 @@ fn register_handlers() {
         Ok(false)
     })).register();
 
-    Handler::follow_message::<ctos::Chat, _>(255, "telescreen_loudspeaker", |context, request| Box::pin(async move {
+    Handler::before_message::<ctos::Chat, _>(255, "telescreen_loudspeaker", |context, request| Box::pin(async move {
         let telescreen = get_room_attachment_sure(context);
         let mut _telescreen = telescreen.pointer.lock();
         if _telescreen.watchers.iter().any(|watcher| watcher.client_addr == *context.addr) {
@@ -143,22 +167,25 @@ fn register_handlers() {
         };
     }).register_as("telescreen_room_attachment_dropper");
 
-    Handler::register_handlers("telescreen", Direction::CTOS, vec!("telescreen_watcher", "telescreen_blocker", "telescreen_message_interceptor", "telescreen_loudspeaker"));
-    Handler::register_handlers("telescreen", Direction::SRVPRU, vec!("telescreen_injector", "telescreen_room_attachment_dropper"));
+    Handler::register_handlers("telescreen", Direction::CTOS, vec!["telescreen_watcher", "telescreen_blocker", "telescreen_message_interceptor", "telescreen_loudspeaker"]);
+    Handler::register_handlers("telescreen", Direction::STOC, vec!["telescreen_hider", "telescreen_hider2", "telescreen_hider3"]);
+    Handler::register_handlers("telescreen", Direction::SRVPRU, vec!["telescreen_injector", "telescreen_room_attachment_dropper"]);
 }
 
 async fn register_telescreen(addr: SocketAddr, telescreen: Arc<Mutex<Telescreen>>) -> anyhow::Result<()> {
     let stream = TcpStream::connect(addr).await?;
     let (mut reader, mut writer) = stream.into_split();
     let version = version_checker::get_configuration().version;
-    writer.write_all(&wrap_mapped_struct(&ctos::PlayerInfo { name: cast_to_fix_length_array(TELESCREEN_NAME) })).await?;
-    writer.write_all(&wrap_mapped_struct(&ctos::JoinGame { 
-        version,
-        align: 0,
-        gameid: 0,
-        pass: cast_to_fix_length_array(TELESCREEN_NAME)
+    writer.write_all(&wrap_mapped_struct(&struct_sequence! {
+        ctos::PlayerInfo { name: cast_to_fix_length_array(TELESCREEN_NAME) },
+        ctos::JoinGame { 
+            version,
+            align: 0,
+            gameid: 0,
+            pass: cast_to_fix_length_array(TELESCREEN_NAME)
+        },
+        ctos::HsToOBServer {}
     })).await?;
-    writer.write_all(&wrap_struct(MessageType::CTOS(ctos::MessageType::HsToOBServer), &message::Empty {} )).await?; 
     writer.forget();
     let telescreen_for_listener = telescreen.clone();
     let mut _telescreen = telescreen.lock();

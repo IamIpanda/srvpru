@@ -39,8 +39,8 @@ fn register_handlers() {
 
     srvpru_handler!(stoc::MessageType::DuelEnd, get_player_attachment_sure, |context| {
         for (index, data) in attachment.replays.iter().enumerate() {
-            context.send(&generate_chat(&format!("{{replay_hint_part1}} {} {{replay_hint_part2}}", index + 1), Colors::Babyblue, context.get_region())).await?;
-            if let Some(socket) = context.socket { socket.write_all(&data).await?; }
+            context.send(&generate_chat(&format!("{{replay_hint_part1}} {} {{replay_hint_part2}}", index + 1), Colors::Babyblue, context.get_region())).await.ok();
+            if let Some(socket) = context.socket { socket.write_all(&data).await.ok(); }
         };
     }).register_as("replay_sender");
     register_player_attachment_dropper();

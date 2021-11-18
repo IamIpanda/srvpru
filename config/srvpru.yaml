@@ -1,22 +1,25 @@
 port: 7911
 ygopro:
-  cwd: /Users/iami/Programming/mycard/srvpru/ygopro/
+  cwd: /usr/src/app/srvpru/ygopro/
   binary: ./ygopro
   address: 127.0.0.1
   wait_start: 10
 plugins:
 - room
 - player
-- delayed_replay
-- version_checker
-- random_match
+
 - stage_recorder
 - position_recorder
 - lp_recorder
+
+- debugger
+- welcome
+- version_checker
+- delayed_replay
+- random_match
 - result_report
 - telescreen
 - reconnect
-- debugger
 - newspeak
 - room_list
 - dialogue

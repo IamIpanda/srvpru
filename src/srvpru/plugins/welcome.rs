@@ -24,7 +24,7 @@ pub fn init() -> Result<()> {
 
 pub fn register_handlers() {
     let configuration = get_configuration();
-    let welcome_handler = Handler::follow_message::<JoinGame, _>(4, "welcome",  move |context, _| Box::pin(async move {
+    let welcome_handler = Handler::before_message::<JoinGame, _>(4, "welcome",  move |context, _| Box::pin(async move {
         context.send(&generate_chat(&configuration.welcome_message, Colors::Babyblue, context.get_region())).await?;
         Ok(false)
     }));

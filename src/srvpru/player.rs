@@ -18,7 +18,9 @@ use crate::ygopro::message::ctos;
 use crate::ygopro::message::srvpru;
 
 use crate::srvpru::ListenError;
-use crate::srvpru::processor::Handler;
+use crate::srvpru::Handler;
+use crate::srvpru::HandlerCondition;
+use crate::srvpru::HandlerOccasion;
 use crate::srvpru::room::Room;
 use crate::srvpru::room::ROOMS_BY_CLIENT_ADDR;
 use crate::srvpru::server;
@@ -124,7 +126,7 @@ impl Player {
                 let data = match tokio::time::timeout(timeout, server_stream_reader.read(&mut buf)).await {
                     Ok(data) => data,
                     Err(_) => {
-                        server::trigger_internal(client_addr, srvpru::StocListenError { error: ListenError::Timeout }).await.ok();
+                        server::trigger_internal(client_addr, srvpru::StocListenError { error: ListenError::Timeout }).await;
                         break
                     }
                 };
@@ -132,19 +134,20 @@ impl Player {
                     Ok(n) if n == 0 => break,
                     Ok(n) => n,
                     Err(e) => {
-                        server::trigger_internal(client_addr, srvpru::StocListenError { error: ListenError::Drop(anyhow::Error::new(e)) }).await.ok();
+                        server::trigger_internal(client_addr, srvpru::StocListenError { error: ListenError::Drop(anyhow::Error::new(e)) }).await;
                         break
                     }
                 };
                 if n > 10240 { 
-                    server::trigger_internal(client_addr, srvpru::StocListenError { error: ListenError::Oversize }).await.ok();
+                    server::trigger_internal(client_addr, srvpru::StocListenError { error: ListenError::Oversize }).await;
                     continue 
                 }
                 let mut socket = this.lock().client_stream_writer.take();
-                let result = crate::srvpru::get_server().stoc_processor.process_multiple_messages(&mut socket, &client_addr, &buf[0..n]).await;
+                let addr = this.lock().client_addr;
+                let result = crate::srvpru::get_server().stoc_processor.process_multiple_messages(&mut socket, &addr, &buf[0..n]).await;
                 if let Some(socket) = socket { this.lock().client_stream_writer.replace(socket); }
                 if let Err(error) = result {
-                    server::trigger_internal(client_addr, srvpru::StocProcessError { error }).await.ok();
+                    server::trigger_internal(client_addr, srvpru::StocProcessError { error }).await;
                 }
             }
         })
@@ -152,14 +155,14 @@ impl Player {
 
     fn register_handlers() {
         // Precursor producer
-        Handler::follow_message::<ctos::PlayerInfo, _>(10, "player_precursor_producer", |context, request| Box::pin(async move {
+        Handler::before_message::<ctos::PlayerInfo, _>(10, "player_precursor_producer", |context, request| Box::pin(async move {
             let name = context.get_string(&request.name, "name")?;
             PlayerPrecursor::new(name.clone(), context.addr.clone(), &context.request_buffer);
             Ok(true)
         })).register();
 
         // Precursor buffer
-        Handler::new(2, "player_precursor_recorder", |_| true, |context| Box::pin(async move {
+        Handler::new(2, "player_precursor_recorder", HandlerOccasion::Before, HandlerCondition::Always, |context| Box::pin(async move {
             let players = PLAYERS.read();
             if ! players.contains_key(&context.addr) {
                 Player::buffer_data_for_precursor(context.addr, context.request_buffer);
@@ -167,12 +170,12 @@ impl Player {
             Ok(false)
         })).register();
 
-        Handler::follow_message::<srvpru::PlayerDestroy, _>(100, "player_dropper", |_, request| Box::pin(async move {
+        Handler::before_message::<srvpru::PlayerDestroy, _>(255, "player_dropper", |_, request| Box::pin(async move {
             Player::destroy(&request.player);
             Ok(false)
         })).register();
 
-        Handler::follow_message::<srvpru::PlayerMove, _>(1, "player_mover", |_, request| Box::pin(async move {
+        Handler::before_message::<srvpru::PlayerMove, _>(1, "player_mover", |_, request| Box::pin(async move {
             let mut post_player = request.post_player.lock();
             let mut new_player = request.new_player.lock();
             // It's not possible to make ygopro server change socket.

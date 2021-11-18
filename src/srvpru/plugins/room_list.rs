@@ -49,15 +49,15 @@ pub fn init() -> anyhow::Result<()> {
 }
 
 fn register_handlers() {
-    Handler::follow_message::<RoomCreated, _>(255, "room_list_create_listener", |context, _| Box::pin(async move {
+    Handler::before_message::<RoomCreated, _>(255, "room_list_create_listener", |context, _| Box::pin(async move {
         broadcast_room("create".to_string(), context.get_room().ok_or(anyhow!("Cannot get the room"))?);
         Ok(false)
     })).register();
-    Handler::follow_message::<RoomDestroy, _>(95, "room_list_destroy_listener", |context, _| Box::pin(async move {
+    Handler::before_message::<RoomDestroy, _>(95, "room_list_destroy_listener", |context, _| Box::pin(async move {
         broadcast_room("delete".to_string(), context.get_room().ok_or(anyhow!("Cannot get the room"))?);
         Ok(false)
     })).register();
-    Handler::follow_message::<JoinGame, _>(255, "room_list_update_listener", |context, _| Box::pin(async move {
+    Handler::before_message::<JoinGame, _>(255, "room_list_update_listener", |context, _| Box::pin(async move {
         broadcast_room("update".to_string(), context.get_room().ok_or(anyhow!("Cannot get the room"))?);
         Ok(false)
     })).register();

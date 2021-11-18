@@ -2,6 +2,8 @@
 
 Srvpru is an alternative for srvpro, rewritten by Rust.
 
+**WARNING**: This program is still in progress, any function can break down or be not implemented.
+
 ## It supports:
 * room
 * plugin
@@ -44,12 +46,13 @@ export RUST_LOG=srvpru
 export SRVPRU_CONFIG_PATH=${YOUR_CONFIG_PATH_HERE}
 ./srvpru
 ```
+
 ### With docker
 ```
-
+$ docker build -t srvpru .
+$ docker run -d --name srvpru srpru
 ```
+You can change your ygopro supplier in `Dockerfile` if needed.
 
 ### With K8s
 coming soon
-
-## Road map

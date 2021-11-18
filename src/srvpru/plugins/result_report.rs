@@ -91,7 +91,7 @@ impl MatchResultReport {
 }
 
 pub fn register_handlers() {
-    Handler::follow_message::<RoomDestroy, _>(95, "match_result_sender", |context, _| Box::pin(async move {
+    Handler::before_message::<RoomDestroy, _>(95, "match_result_sender", |context, _| Box::pin(async move {
         let configuration = get_configuration();
         let attachment = get_room_attachment_sure(context);
         let players = context.get_room().ok_or(anyhow!("Cannot get room"))?.lock().get_players_in_hashmap();
@@ -118,7 +118,7 @@ pub fn register_handlers() {
         Ok(false)
     })).register();
 
-    Handler::follow_message::<PlayerDestroy, _>(100, "match_result_player_drop_listener", |context, _| Box::pin(async move {
+    Handler::before_message::<PlayerDestroy, _>(100, "match_result_player_drop_listener", |context, _| Box::pin(async move {
         let position = context.get_position();
         if let Some(mut attachment) = get_room_attachment(context) {
             match position {
@@ -130,7 +130,7 @@ pub fn register_handlers() {
         Ok(false)
     })).register();
 
-    Handler::follow_message::<Win, _>(100, "match_result_countor", |context, request| Box::pin(async move {
+    Handler::before_message::<Win, _>(100, "match_result_countor", |context, request| Box::pin(async move {
         let mut attachment = get_room_attachment_sure(context);
         match request.winner {
             Netplayer::Player1 => attachment.player_a_result.score.step(),
@@ -140,7 +140,7 @@ pub fn register_handlers() {
         Ok(false)
     })).register();
 
-    Handler::follow_message::<Start, _>(100, "match_result_first_recorder", |context, request| Box::pin(async move {
+    Handler::before_message::<Start, _>(100, "match_result_first_recorder", |context, request| Box::pin(async move {
         if request._type & 0xf > 0 {
             let mut attachment = get_room_attachment_sure(context);
             attachment.first.push(context.get_player().ok_or(anyhow!("Cannot get player"))?.lock().name.clone());
