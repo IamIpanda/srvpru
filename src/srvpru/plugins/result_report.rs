@@ -90,6 +90,7 @@ impl MatchResultReport {
     }
 }
 
+static REQWEST_CLIENT: once_cell::sync::OnceCell<reqwest::Client> = once_cell::sync::OnceCell::new();
 pub fn register_handlers() {
     Handler::before_message::<RoomDestroy, _>(95, "match_result_sender", |context, _| Box::pin(async move {
         let configuration = get_configuration();
@@ -113,8 +114,7 @@ pub fn register_handlers() {
             end: chrono::offset::Local::now().timestamp(),
             arena: configuration.access_key.clone(),
         };
-        let client = reqwest::Client::new();
-        client.post(&configuration.report_endpoint).form(&report.to_form()).send().await.ok();
+        REQWEST_CLIENT.get_or_init(|| reqwest::Client::new()).post(&configuration.report_endpoint).form(&report.to_form()).send().await.ok();
         Ok(false)
     })).register();
 

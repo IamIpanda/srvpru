@@ -37,19 +37,7 @@ impl crate::ygopro::Mode {
 
 impl HostInfo {
     fn new() -> HostInfo {
-        HostInfo {
-            lflist: 0,
-            rule: 0,
-            mode: crate::ygopro::Mode::Single,
-            duel_rule: 5,
-            no_check_deck: false,
-            no_shuffle_deck: false,
-            padding: [0; 3],
-            start_lp: 8000,
-            start_hand: 5,
-            draw_count: 1,
-            time_limit: 233
-        }
+        crate::srvpru::get_configuration().ygopro.host_info.clone() 
     }
 
     fn decide_host_info_from_name<'a>(&mut self, origin_name: &'a str) -> &'a str {
@@ -58,6 +46,7 @@ impl HostInfo {
             (&origin_name[0..index as usize], &origin_name[(index + 1)..])
         }
         else { ("", origin_name) };
+        let default_host_info = &crate::srvpru::get_configuration().ygopro.host_info;
         for _controller in controllers.split(',') {
             let controller = _controller.trim();
             match controller {
@@ -72,12 +61,12 @@ impl HostInfo {
                 "NU" | "NOUNIQUE" => { self.rule = 4 },
                 "NC" | "NOCHECK" => { self.no_check_deck = true },
                 "NS" | "NOSHUFFLE" => { self.no_shuffle_deck = true },
-                _ if controller.starts_with("TIME") => { self.time_limit = (&controller[4..]).parse().unwrap_or(180) },
-                _ if controller.starts_with("LP") => { self.start_lp = (&controller[2..]).parse().unwrap_or(8000) },
-                _ if controller.starts_with("START") => { self.start_hand = (&controller[5..]).parse().unwrap_or(5) },
-                _ if controller.starts_with("DRAW") => { self.draw_count = (&controller[4..]).parse().unwrap_or(1) },
-                _ if controller.starts_with("LFLIST") => { self.lflist = (&controller[6..]).parse().unwrap_or(0) },
-                _ if controller.starts_with("MR") => { self.rule = (&controller[2..]).parse().unwrap_or(5) },
+                _ if controller.starts_with("TIME") => { self.time_limit = (&controller[4..]).parse().unwrap_or(default_host_info.time_limit) },
+                _ if controller.starts_with("LP") => { self.start_lp = (&controller[2..]).parse().unwrap_or(default_host_info.start_lp) },
+                _ if controller.starts_with("START") => { self.start_hand = (&controller[5..]).parse().unwrap_or(default_host_info.start_hand) },
+                _ if controller.starts_with("DRAW") => { self.draw_count = (&controller[4..]).parse().unwrap_or(default_host_info.draw_count) },
+                _ if controller.starts_with("LFLIST") => { self.lflist = (&controller[6..]).parse().unwrap_or(default_host_info.lflist) },
+                _ if controller.starts_with("MR") => { self.rule = (&controller[2..]).parse().unwrap_or(default_host_info.rule) },
                 _ => ()
             }
         }

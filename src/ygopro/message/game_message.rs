@@ -123,7 +123,7 @@ impl<'de> Deserialize<'de> for GameMessage {
                     // MessageType::Unequip            => self.deserialize_message::<Unequip,            _>(&mut seq)?,
                     // MessageType::CardTarget         => self.deserialize_message::<CardTarget,         _>(&mut seq)?,
                     // MessageType::CancelTarget       => self.deserialize_message::<CancelTarget,       _>(&mut seq)?,
-                    // MessageType::PayLpcost          => self.deserialize_message::<PayLpcost,          _>(&mut seq)?,
+                       MessageType::PayLpcost          => self.deserialize_message::<PayLpcost,          _>(&mut seq)?,
                     // MessageType::AddCounter         => self.deserialize_message::<AddCounter,         _>(&mut seq)?,
                     // MessageType::RemoveCounter      => self.deserialize_message::<RemoveCounter,      _>(&mut seq)?,
                     // MessageType::Attack             => self.deserialize_message::<Attack,             _>(&mut seq)?,

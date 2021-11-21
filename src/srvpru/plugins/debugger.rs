@@ -28,7 +28,6 @@ pub fn register_handlers() {
         } 
         else { "[ - ]".to_string() };
         debug!("STOC Message   [{:}] <- {:} {:?}", context.addr, text, context.message_type.as_ref().unwrap());
-        trace!("{:?}", context.request);
         Ok(false)
     })).register();
 

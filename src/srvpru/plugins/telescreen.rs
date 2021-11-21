@@ -36,12 +36,9 @@ use crate::ygopro::message::stoc;
 use crate::ygopro::message::srvpru;
 use crate::ygopro::message::Direction;
 use crate::ygopro::message::MessageType;
-use crate::ygopro::message::stoc::HsPlayerChange;
 use crate::ygopro::message::stoc::HsWatchChange;
 use crate::ygopro::message::string::cast_to_fix_length_array;
-use crate::ygopro::message::generate::wrap_struct;
 use crate::ygopro::message::generate::wrap_mapped_struct;
-use crate::ygopro::message;
 
 room_attach! {
     pointer: Arc<Mutex<Telescreen>>

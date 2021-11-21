@@ -46,7 +46,7 @@ pub fn load_configuration<T: serde::de::DeserializeOwned>(name: &str) -> anyhow:
             }
         }
     }
-    Err(anyhow!("Cannot find configuration file for mod {}", name))
+    serde_json::from_str("{}").map_err(|e| anyhow!("Cannot find configuration file for mod {}"))
 }
 
 #[macro_export]

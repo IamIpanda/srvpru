@@ -43,6 +43,7 @@ fn register_handlers() {
             let mut random_rooms = RANDOM_ROOMS.write();
             let room_pool = random_rooms.entry(mode).or_insert(Vec::new());
             if let Some(room_position) = room_pool.iter().position(|room| can_join_room(context, room)) {
+                context.send(&generate_chat("{random_duel_enter_room_waiting}", Colors::Babyblue, context.get_region())).await?;
                 room_pool[room_position].clone()
             }
             else {
@@ -50,6 +51,7 @@ fn register_handlers() {
                 let room = Room::get_or_create_by_name(&room_name).await.clone();
                 room.lock().flags.insert("random_match".to_string(), "".to_string());
                 room_pool.push(room.clone());
+                context.send(&generate_chat("{random_duel_enter_room_new}", Colors::Babyblue, context.get_region())).await?;
                 room
             }
         };

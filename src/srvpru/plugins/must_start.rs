@@ -19,8 +19,13 @@ use crate::ygopro::message::Direction;
 use crate::ygopro::message::ctos;
 use crate::ygopro::message::stoc;
 
+fn default_start_game() -> Vec<u64> { vec![30, 15, 5] }
+fn default_change_side() -> u64 { 2 }
+
 set_configuration! {
+    #[serde(default = "default_start_game")]
     start_game: Vec<u64>,
+    #[serde(default = "default_change_side")]
     change_side: u64
 }
 

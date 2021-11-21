@@ -108,6 +108,7 @@ lazy_static! {
 }
 
 fn start_server() {
+    if !crate::srvpru::get_configuration().plugins.contains(&"room_list".to_string()) { return; }
     let app = Router::new().route("/", routing::get(server_main_handler));
     let configuration = get_configuration();
     tokio::spawn(async move {

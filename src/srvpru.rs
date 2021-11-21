@@ -19,6 +19,7 @@ fn default_ygopro_address() -> String { "127.0.0.1".to_string() }
 fn default_ygopro_binary() -> String { "./ygopro".to_string() }
 fn default_ygopro_cwd() -> String{ "./ygopro".to_string() }
 fn default_ygopro_lflist_conf() -> String { "./ygopro/lflist.conf".to_string() }
+fn default_host_info() -> crate::ygopro::message::HostInfo { serde_json::from_str("{}").unwrap() }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct YgoproConfiguration {
@@ -32,6 +33,8 @@ pub struct YgoproConfiguration {
     address: String,
     #[serde(default)]
     wait_start: u64,
+    #[serde(default = "default_host_info")]
+    pub host_info: crate::ygopro::message::HostInfo
 }
 
 fn default_port() -> u16 { 7911 }

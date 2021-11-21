@@ -12,7 +12,10 @@ use crate::ygopro::message::ctos::JoinGame;
 use crate::srvpru::processor::Handler;
 use crate::srvpru::generate_chat;
 
+fn default_welcome_message() -> String { "Srvpru Server".to_string() }
+
 set_configuration! {
+    #[serde(default = "default_welcome_message")]
     welcome_message: String
 }
 
@@ -24,10 +27,10 @@ pub fn init() -> Result<()> {
 
 pub fn register_handlers() {
     let configuration = get_configuration();
-    let welcome_handler = Handler::before_message::<JoinGame, _>(4, "welcome",  move |context, _| Box::pin(async move {
-        context.send(&generate_chat(&configuration.welcome_message, Colors::Babyblue, context.get_region())).await?;
+    Handler::follow_message::<JoinGame, _>(4, "welcome",  move |context, _| Box::pin(async move {
+        context.send_back(&generate_chat(&configuration.welcome_message, Colors::Green, context.get_region())).await?;
         Ok(false)
-    }));
+    })).register();
     
-    Handler::register_handler("welcome", welcome_handler);
+    Handler::register_handlers("welcome", crate::ygopro::message::Direction::CTOS, vec!["welcome"]);
 }

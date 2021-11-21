@@ -30,6 +30,7 @@ pub fn init() -> anyhow::Result<()> {
     Ok(())
 }
 
+static REQWEST_CLIENT: once_cell::sync::OnceCell<reqwest::Client> = once_cell::sync::OnceCell::new();
 fn register_handlers() {
     Handler::follow_message::<stoc::DuelStart, _>(100, "deck_reporter", |context, _| Box::pin(async move {
         let decks = context.get_deck().ok_or(anyhow!("Can't get player used deck"))?;
@@ -41,8 +42,7 @@ fn register_handlers() {
             player_name: context.get_player().ok_or(anyhow!("Can't get player"))?.lock().name.clone(),
             arena: configuration.arena.clone()
         };
-        let client = reqwest::Client::new();
-        client.post(&configuration.endpoint).form(&report.to_form()).send().await?;
+        REQWEST_CLIENT.get_or_init(|| reqwest::Client::new()).post(&configuration.endpoint).form(&report.to_form()).send().await?;
         Ok(false)
     })).register();
 

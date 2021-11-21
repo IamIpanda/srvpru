@@ -37,7 +37,10 @@ use crate::srvpru::plugins::stage_recorder::DuelStage;
 use crate::srvpru::generate_chat;
 use crate::ygopro::message::stoc::FieldFinish;
 
+fn default_timeout() -> u64 { 90 }
+
 set_configuration! {
+    #[serde(default = "default_timeout")]
     timeout: u64,
     #[serde(default)]
     can_reconnect_by_kick: bool
@@ -92,7 +95,7 @@ fn register_handlers() {
         if duel_stage == DuelStage::Begin || duel_stage == DuelStage::End { return Ok(false); }
         // Already have a user drop. Drop that player as normal. 
         // (And will cause game end => room drop => player arc release)
-        let mut room_attachment = get_room_attachment_sure(context);
+        let mut room_attachment = unwrap_or_return!(get_room_attachment(context));
         if let Some(dropped_player) = room_attachment.dropped_player.take() {
             // The second user drops.
             {

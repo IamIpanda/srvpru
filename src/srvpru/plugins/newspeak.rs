@@ -218,6 +218,7 @@ impl BadWordReport {
     }
 }
 
+static REQWEST_CLIENT: once_cell::sync::OnceCell<reqwest::Client> = once_cell::sync::OnceCell::new();
 async fn report_to_big_brother(room: Arc<Mutex<Room>>, player: Arc<Mutex<Player>>, level: u8, content: String) -> anyhow::Result<()> {
     let configuration = get_configuration();
     if configuration.report_to_big_brother == "" { return Ok(()); }
@@ -233,7 +234,6 @@ async fn report_to_big_brother(room: Arc<Mutex<Room>>, player: Arc<Mutex<Player>
         content,
         _match: "".to_string()
     };
-    let client = reqwest::Client::new();
-    client.post(&configuration.report_to_big_brother).form(&report.to_form()).send().await?;
+    REQWEST_CLIENT.get_or_init(|| reqwest::Client::new()).post(&configuration.report_to_big_brother).form(&report.to_form()).send().await?;
     Ok(())
 }

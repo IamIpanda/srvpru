@@ -3,7 +3,7 @@ ygopro:
   cwd: /usr/src/app/srvpru/ygopro/
   binary: ./ygopro
   address: 127.0.0.1
-  wait_start: 10
+  wait_start: 0
 plugins:
 - room
 - player
