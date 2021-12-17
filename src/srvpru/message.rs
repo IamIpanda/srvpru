@@ -1,4 +1,8 @@
-//! Fake message structs.
+// ============================================================
+//  message 
+// ------------------------------------------------------------
+//! Srvpru message structs.
+// ============================================================
 
 use std::sync::Arc;
 
@@ -36,23 +40,31 @@ pub fn generate_message_type(_type: MessageType) -> crate::ygopro::message::Mess
     crate::ygopro::message::MessageType::SRVPRU(_type)
 }
 
-#[derive(Copy, Clone, TryFromPrimitive, IntoPrimitive, Eq, PartialEq, Debug, Hash)]
+#[derive(Copy, Clone, TryFromPrimitive, IntoPrimitive, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
 #[repr(u8)]
 pub enum MessageType {
-    StructSequence,
-    
+    StructSequence,    
+    ServerStart,
+    Reload,
+
     RoomCreated,
     PlayerDestroy,
     PlayerMove,
     RoomDestroy,
-    StocProcessError,
-    CtosProcessError,
-    InternalProcessError,
+    STOCProcessError,
+    CTOSProcessError,
+    SRVPRUProcessError,
     StocListenError,
     CtosListenError,
 
     LpChange,
 }
+
+#[derive(Serialize, Deserialize, Debug, Struct)]
+pub struct ServerStart;
+
+#[derive(Serialize, Deserialize, Debug, Struct)]
+pub struct Reload;
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
 // #[srvpru]
@@ -79,22 +91,41 @@ pub struct PlayerMove {
     pub new_player: Arc<Mutex<Player>>
 }
 
-#[derive(Serialize, Deserialize, Debug, Struct)]
-// #[srvpru]
-pub struct StocProcessError {
+#[derive(Serialize, Deserialize, Debug)]
+pub struct STOCProcessError {
     pub error: ProcessorError
 }
 
-#[derive(Serialize, Deserialize, Debug, Struct)]
-// #[srvpru]
-pub struct CtosProcessError {
+impl crate::ygopro::message::Struct for STOCProcessError {}
+impl crate::ygopro::message::MappedStruct for STOCProcessError {
+    fn message() -> crate::ygopro::message::MessageType {
+        generate_message_type(MessageType::STOCProcessError)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CTOSProcessError {
     pub error: ProcessorError
 }
 
-#[derive(Serialize, Deserialize, Debug, Struct)]
+impl crate::ygopro::message::Struct for CTOSProcessError {}
+impl crate::ygopro::message::MappedStruct for CTOSProcessError {
+    fn message() -> crate::ygopro::message::MessageType {
+        generate_message_type(MessageType::CTOSProcessError)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 // #[srvpru]
-pub struct InternalProcessError {
+pub struct SRVPRUProcessError {
     pub error: ProcessorError
+}
+
+impl crate::ygopro::message::Struct for SRVPRUProcessError {}
+impl crate::ygopro::message::MappedStruct for SRVPRUProcessError {
+    fn message() -> crate::ygopro::message::MessageType {
+        generate_message_type(MessageType::SRVPRUProcessError)
+    }
 }
 #[derive(Serialize, Deserialize, Debug, Struct)]
 // #[srvpru]

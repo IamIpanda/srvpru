@@ -15,6 +15,7 @@ impl std::convert::Into<u8> for MessageType {
     }
 }
 
+/// Transform u8 to [MessageType] with a [Direction].
 pub fn try_get_message_type(direction: Direction, type_number: u8) -> Option<MessageType> {
     match direction {
         Direction::CTOS => ctos::MessageType::try_from(type_number).ok().map(|s| MessageType::CTOS(s)),
@@ -26,9 +27,15 @@ pub fn try_get_message_type(direction: Direction, type_number: u8) -> Option<Mes
 fn deserialize_struct<'a, T>(data: &'a [u8]) -> Option<Box<dyn Struct>> where T: serde::de::Deserialize<'a> + Struct {
     bincode::deserialize::<T>(data).ok().map(|data| Box::new(data) as Box<dyn Struct>)
 }
-
-pub fn deserialize_struct_by_type(direction: MessageType, data: &[u8]) -> Option<Box<dyn Struct>> {
-    match direction {
+// ------------------------------------------------------------
+// deserialize_struct_by_type
+// ------------------------------------------------------------
+/// Transform raw data to a [`Struct`].
+/// 
+/// Panic if offer a [`MessageType::SRVPRU`].
+// ------------------------------------------------------------
+pub fn deserialize_struct_by_type(message_type: MessageType, data: &[u8]) -> Option<Box<dyn Struct>> {
+    match message_type {
         MessageType::CTOS(ctos_type) => {
             match ctos_type {
                 // ctos::MessageType::Response     => deserialize_struct::<ctos::Response>(data),
@@ -42,7 +49,7 @@ pub fn deserialize_struct_by_type(direction: MessageType, data: &[u8]) -> Option
                 ctos::MessageType::Surrender    => deserialize_struct::<ctos::Surrender>(data),
                 ctos::MessageType::TimeConfirm  => deserialize_struct::<ctos::TimeConfirm>(data),
                 ctos::MessageType::Chat         => deserialize_struct::<ctos::Chat>(data),
-                ctos::MessageType::HsTodueList  => deserialize_struct::<ctos::HsTodueList>(data),
+                ctos::MessageType::HsToDuelist  => deserialize_struct::<ctos::HsToDuelist>(data),
                 ctos::MessageType::HsToOBServer => deserialize_struct::<ctos::HsToOBServer>(data),
                 ctos::MessageType::HsReady      => deserialize_struct::<ctos::HsReady>(data),
                 ctos::MessageType::HsNotReady   => deserialize_struct::<ctos::HsNotReady>(data),
@@ -83,7 +90,12 @@ pub fn deserialize_struct_by_type(direction: MessageType, data: &[u8]) -> Option
     }
 }
 
+/// Offer string transform functions.
 pub mod string {
+    #![allow(dead_code)]
+
+    /// transform \[u16\] to string. \
+    /// return [`None`] if it's illegal.
     pub fn cast_to_string(array: &[u16]) -> Option<String> {
         let mut str = array;
         if let Some(index) = array.iter().position(|&i| i == 0) {
@@ -96,12 +108,15 @@ pub mod string {
         else { Some(cow.to_string()) }
     }
 
+    /// Transform string to \[u16\] without length limit but a \0 in the end.
     pub fn cast_to_c_array(message: &str) -> Vec<u16> {
         let mut vector: Vec<u16> = message.encode_utf16().collect();
         vector.push(0);
         vector
     }
 
+    /// Transform string to \[u16\] with a fixed size. \
+    /// Differennt from ygopro, it will keeps 0 for residual part.
     pub fn cast_to_fix_length_array<const N: usize>(message: &str) -> [u16; N] {
         let mut data = [0u16; N];
         for (index, chr) in message.encode_utf16().enumerate() {
@@ -111,20 +126,26 @@ pub mod string {
     }
 }
 
+/// Offer wrapping methods.
 pub mod generate {
+    #![allow(dead_code)]
+
     use crate::ygopro::message::Struct;
     use crate::ygopro::message::MappedStruct;
     use crate::ygopro::message::MessageType;
     use crate::ygopro::message::srvpru;
 
+    /// Transform a [MappedStruct] to \[u8\], with leading length and type bytes.
     pub fn wrap_mapped_struct<T: Struct + MappedStruct + serde::Serialize>(data: &T) -> Vec<u8> {
         return wrap_data(T::message(), &bincode::serialize(&data).unwrap());
     }
 
+    /// Transform a [Struct] to \[u8\], with leading length and type bytes.
     pub fn wrap_struct(message_type: MessageType, data: &(impl Struct + serde::Serialize)) -> Vec<u8> {
         return wrap_data(message_type, &bincode::serialize(&data).unwrap());
     }
 
+    /// Add a leading length and type bytes to \[u8\].
     pub fn wrap_data(message_type: MessageType, data: &[u8]) -> Vec<u8> {
         if message_type == MessageType::SRVPRU(srvpru::MessageType::StructSequence) { return data.to_vec() };
         let size = data.len() + 1;

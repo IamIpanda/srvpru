@@ -27,8 +27,8 @@ fn register_handlers() {
         if room.lock().host_info.mode != crate::ygopro::Mode::Match {
             return Ok(false);
         }
-        attachment.replays.push(context.request_buffer.to_vec());
-        let vec = context.request_buffer.to_vec();
+        attachment.replays.push(context.message_buffer.to_vec());
+        let vec = context.message_buffer.to_vec();
         let mut cursor = Cursor::new(vec);
         cursor.set_position(3);
         if let Err(e) = Replay::from_reader(&mut cursor) {

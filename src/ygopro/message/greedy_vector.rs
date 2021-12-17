@@ -16,7 +16,7 @@ pub trait GreedyVector<'a, const N: usize>: Sized {
 macro_rules! greedy_vector {
     ($($max_length:expr),+) => {
         $(
-            impl<'a, T> GreedyVector<'a, $max_length> for Vec<T> where T: Default + Copy + Serialize + Deserialize<'a> {
+            impl<'a, T> GreedyVector<'a, $max_length> for Vec<T> where T: Copy + Serialize + Deserialize<'a> {
                 fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
                     let mut seq = serializer.serialize_tuple(self.len())?;
                     for elem in &self[..] {
@@ -28,7 +28,7 @@ macro_rules! greedy_vector {
                 fn deserialize<D>(deserializer: D) -> Result<Vec<T>, D::Error> where D: Deserializer<'a> {
                     struct ArrayVisitor<T> { element: PhantomData<T> }
 
-                    impl<'a, T> Visitor<'a> for ArrayVisitor<T> where T: Default + Copy + Deserialize<'a>
+                    impl<'a, T> Visitor<'a> for ArrayVisitor<T> where T: Copy + Deserialize<'a>
                     {
                         type Value = Vec<T>;
                         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {

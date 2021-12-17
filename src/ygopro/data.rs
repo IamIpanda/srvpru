@@ -1,4 +1,6 @@
 #![allow(dead_code)]
+#![allow(non_upper_case_globals)]
+use std::collections::HashMap;
 use std::io::BufRead;
 use std::io::Cursor;
 use std::io::Read;
@@ -6,23 +8,35 @@ use std::io::Read;
 use byteorder::LittleEndian;
 use byteorder::ReadBytesExt;
 use lzma_rs::lzma_decompress_with_options;
+use serde::Serialize;
+use serde::Deserialize;
+use sqlx::Connection;
+use sqlx::Row;
 
-
-use crate::ygopro::message::ctos::UpdateDeck;
+use crate::ygopro::message::GreedyVector;
 use crate::ygopro::message::string::cast_to_string;
 
-#[derive(PartialEq, Eq, Debug, Clone, Default)]
+#[derive(PartialEq, Eq, Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(from = "DeckBinaryStructure", into = "DeckBinaryStructure")]
 pub struct Deck {
     pub main: Vec<u32>,
     pub side: Vec<u32>,
     pub ex: Vec<u32> // always empty
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+struct DeckBinaryStructure {
+    pub main_count: usize,
+    pub side_count: usize,
+    #[serde(with = "GreedyVector::<90>")]
+    pub deck_buffer: Vec<u32>
+}
+
 impl Deck {
-    pub fn from_data(data: &UpdateDeck) -> Deck {
+    fn from_binary(data: &DeckBinaryStructure) -> Deck {
         Deck {
-            main: data.deckbuf[0..data.mainc].to_vec(),
-            side: data.deckbuf[data.mainc..data.mainc + data.sidec].to_vec(),
+            main: data.deck_buffer[0..data.main_count].to_vec(),
+            side: data.deck_buffer[data.main_count..data.main_count + data.side_count].to_vec(),
             ex: Vec::new()
         }
     }
@@ -34,15 +48,25 @@ impl Deck {
             side: Vec::new()
         })
     }
+}
 
-    pub fn to_update_deck(&self) -> UpdateDeck {
-        todo!()
+impl core::convert::From<DeckBinaryStructure> for Deck {
+    fn from(data: DeckBinaryStructure) -> Self {
+        Deck::from_binary(&data) 
     }
 }
 
-impl core::convert::From<UpdateDeck> for Deck {
-    fn from(data: UpdateDeck) -> Self {
-        Deck::from_data(&data) 
+impl core::convert::Into<DeckBinaryStructure> for Deck {
+    fn into(mut self) -> DeckBinaryStructure {
+        let main_count = self.main.len() + self.ex.len();
+        let side_count = self.side.len();
+        self.main.append(&mut self.ex);
+        self.main.append(&mut self.side);
+        DeckBinaryStructure {
+            main_count,
+            side_count,
+            deck_buffer: self.main,
+        }
     }
 }
 
@@ -67,10 +91,20 @@ pub const REPLAY_DECODE_FLAG: u32 = 4;
 pub const REPLAY_SINGLE_MODE: u32 = 8;
 pub const REPLAY_UNIFORM: u32 = 16;
 
+bitflags! {
+    pub struct ReplayHeaderFlags: u32 {
+        const Compressed = 1;
+        const Tag = 2;
+        const Decode = 4;
+        const SingleMode = 8;
+        const Uniform = 16;
+    }
+}
+
 pub struct ReplayHeader {
     pub id: u32,
     pub version: u32,
-    pub flag: u32,
+    pub flag: ReplayHeaderFlags,
     pub seed: u32,
     pub data_size: u32,
     pub start_time: u32,
@@ -101,7 +135,7 @@ impl ReplayHeader {
         Ok(ReplayHeader {
             id: reader.read_u32::<LittleEndian>()?,
             version: reader.read_u32::<LittleEndian>()?,
-            flag: reader.read_u32::<LittleEndian>()?,
+            flag: ReplayHeaderFlags::from_bits_truncate(reader.read_u32::<LittleEndian>()?),
             seed: reader.read_u32::<LittleEndian>()?,
             data_size: reader.read_u32::<LittleEndian>()?,
             start_time: reader.read_u32::<LittleEndian>()?,
@@ -109,10 +143,9 @@ impl ReplayHeader {
         })
     }
 
-    pub fn is_compressed(&self) -> bool { self.flag & REPLAY_COMPRESSED_FLAG > 0 }
-    pub fn is_tag(&self)        -> bool { self.flag & REPLAY_TAG_FLAG > 0 }
-    #[allow(dead_code)]
-    pub fn is_decoded(&self)    -> bool { self.flag & REPLAY_DECODE_FLAG > 0 }
+    pub fn is_compressed(&self) -> bool { self.flag.contains(ReplayHeaderFlags::Compressed) }
+    pub fn is_tag(&self)        -> bool { self.flag.contains(ReplayHeaderFlags::Tag) }
+    pub fn is_decoded(&self)    -> bool { self.flag.contains(ReplayHeaderFlags::Decode) }
 }
 
 impl Replay {
@@ -220,4 +253,100 @@ lazy_static! {
         lflists.init().expect("Failed to initialize lflists");
         lflists
     };
+}
+
+pub struct Card {
+    pub code: u32,
+    pub alias: u32,
+    pub setcode: i64,
+    pub _type: crate::ygopro::Type,
+    pub level: u32,
+    pub attribute: crate::ygopro::Attribute,
+    pub race: crate::ygopro::Race,
+    pub attack: i32,
+    pub defense: i32,
+    pub left_scale: u32,
+    pub right_scale: u32,
+    pub link_marker: crate::ygopro::Linkmarkers
+}
+
+impl<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> for Card {
+    fn from_row(row: &'r sqlx::sqlite::SqliteRow) -> Result<Self, sqlx::Error> {
+        let code = row.try_get("id")?;
+        let alias = row.try_get("alias")?;
+        let setcode = row.try_get("setcode")?;
+        let _type = crate::ygopro::Type::from_bits_truncate(row.try_get("type")?);
+        let _level: u32 = row.try_get("level")?;
+        let level = _level & 0xff;
+		let left_scale = (_level >> 24) & 0xff;
+		let right_scale = (_level >> 16) & 0xff;
+        let attribute = crate::ygopro::Attribute::from_bits_truncate(row.try_get("attribute")?);
+        let race = crate::ygopro::Race::from_bits_truncate(row.try_get("race")?);
+        let attack = row.try_get("atk")?;
+        let _defense = row.try_get("def")?;
+        let (defense, link_marker) = if _type.contains(crate::ygopro::Type::Link) {
+            (0, crate::ygopro::Linkmarkers::from_bits_truncate(u32::try_from(_defense).ok().unwrap_or(0) ))
+        }
+        else {
+            (_defense, crate::ygopro::Linkmarkers::empty())
+        };
+
+        Ok(Card{ 
+            code,
+            alias,
+            setcode,
+            _type,
+            level,
+            attribute,
+            race,
+            attack,
+            defense,
+            left_scale,
+            right_scale,
+            link_marker
+        })
+    }
+}
+
+impl Card {
+    pub async fn load_all_cards() -> anyhow::Result<()> {
+        let configuration = &crate::srvpru::get_configuration().ygopro;
+        let path = std::path::Path::new(&configuration.cwd).join(&configuration.database);
+        let path= path.to_str().ok_or(anyhow!("Path not legal"))?;
+        Card::load_all_cards_from(path, "main").await?;
+        Ok(())
+    }
+
+    pub async fn load_all_cards_from(path: &str, name: &str) -> anyhow::Result<()> {
+        let mut conn = sqlx::SqliteConnection::connect(&("sqlite://".to_string() + path)).await?;
+        let cards = sqlx::query_as::<_, Card>("SELECT * FROM datas").fetch_all(&mut conn).await?;
+        Card::remove_cards(name);
+        Card::add_cards(name, cards);
+        Ok(())
+    }
+
+    pub fn remove_cards(name: &str) {
+        if let Some(indexes) = CARD_INDEXES.lock().remove(name) {
+            let mut cards = CARDS.write();
+            for index in indexes.iter() {
+                cards.remove(index);
+            }
+        }
+    }
+
+    pub fn add_cards(name: &str, cards: Vec<Card>) {
+        let mut all_cards = CARDS.write();
+        let mut all_card_indexes = CARD_INDEXES.lock();
+        let mut card_indexes = Vec::new();
+        for card in cards.into_iter() {
+            card_indexes.push(card.code);
+            all_cards.insert(card.code, card);
+        }
+        all_card_indexes.insert(name.to_string(), card_indexes);
+    }
+}
+
+lazy_static! {
+    pub static ref CARDS: parking_lot::RwLock<HashMap<u32, Card>> = parking_lot::RwLock::new(HashMap::new());
+    static ref CARD_INDEXES: parking_lot::Mutex<HashMap<String, Vec<u32>>> = parking_lot::Mutex::new(HashMap::new());
 }

@@ -1,3 +1,10 @@
+// ============================================================
+//  ctos
+// ------------------------------------------------------------
+/// Message types sent from client to server.
+// ============================================================
+
+
 use serde::Serialize;
 use serde::Deserialize;
 use num_enum::TryFromPrimitive;
@@ -7,7 +14,7 @@ use crate::ygopro::Netplayer;
 use crate::ygopro::message::HostInfo;
 use crate::ygopro::message::GreedyVector;
 
-#[derive(Copy, Clone, TryFromPrimitive, IntoPrimitive, Eq, PartialEq, Debug, Hash)]
+#[derive(Copy, Clone, TryFromPrimitive, IntoPrimitive, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
 #[repr(u8)]
 pub enum MessageType {
     Response = 1,
@@ -21,7 +28,7 @@ pub enum MessageType {
     Surrender = 20,
     TimeConfirm = 21,
     Chat = 22,
-    HsTodueList = 32,
+    HsToDuelist = 32,
     HsToOBServer = 33,
     HsReady = 34,
     HsNotReady = 35,
@@ -31,34 +38,26 @@ pub enum MessageType {
 }
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[ctos]
 pub struct UpdateDeck {
-    pub mainc: usize,
-    pub sidec: usize,
-    #[serde(with = "GreedyVector::<90>")]
-    pub deckbuf: Vec<u32>
+    pub deck: crate::ygopro::data::Deck
 }
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[ctos]
 pub struct HandResult {
     pub res: u8
 }
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[ctos]
 pub struct TpResult {
     pub res: u8
 }
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[ctos]
 pub struct PlayerInfo {
     pub name: [u16; 20]
 }
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[ctos]
 pub struct CreateGame {
     pub info: HostInfo,
     pub name: [u16; 20],
@@ -66,7 +65,6 @@ pub struct CreateGame {
 }
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[ctos]
 pub struct JoinGame {
     pub version: u16,
     pub align: u16,
@@ -75,26 +73,22 @@ pub struct JoinGame {
 }
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[ctos]
 pub struct LeaveGame;
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[ctos]
 pub struct Surrender;
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[ctos]
 pub struct TimeConfirm;
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[ctos]
 pub struct Chat {
     #[serde(with = "GreedyVector::<255>")]
     pub msg: Vec<u16>
 }
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-pub struct HsTodueList;
+pub struct HsToDuelist;
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
 pub struct HsToOBServer;
@@ -106,17 +100,14 @@ pub struct HsReady;
 pub struct HsNotReady;
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[ctos]
 pub struct HsKick {
     pub pos: Netplayer
 }
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[ctos]
 pub struct HsStart;
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[ctos]
 pub struct RequestField;
 
 pub fn generate_message_type(_type: MessageType) -> crate::ygopro::message::MessageType {

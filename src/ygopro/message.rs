@@ -3,10 +3,10 @@ mod mapped_struct;
 mod constants;
 mod utils;
 mod greedy_vector;
-pub use mapped_struct::*;
-pub use constants::*;
-pub use utils::*;
-use greedy_vector::*;
+#[doc(inline)] pub use mapped_struct::*;
+#[doc(inline)] pub use constants::*;
+#[doc(inline)] pub use utils::*;
+pub use greedy_vector::*;
 
 pub mod ctos;
 pub mod stoc;

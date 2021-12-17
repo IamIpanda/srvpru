@@ -4,8 +4,6 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::io::AsyncReadExt;
 use once_cell::sync::OnceCell;
-use tokio::net::tcp::OwnedWriteHalf;
-use tokio::task::JoinHandle;
 
 use crate::ygopro::message;
 use crate::ygopro::message::srvpru;
@@ -14,10 +12,12 @@ use crate::ygopro::message::MappedStruct;
 
 use crate::srvpru::processor::*;
 use crate::srvpru::player::*;
+use crate::ygopro::message::srvpru::ServerStart;
 
-use super::message::InternalProcessError;
+use super::message::SRVPRUProcessError;
 
 pub static SOCKET_SERVER: OnceCell<Server> = OnceCell::new();
+
 
 pub struct Server {
     pub stoc_processor: Processor,
@@ -32,6 +32,19 @@ impl Server {
             ctos_processor: Processor::new(message::Direction::CTOS),
             internal_processor: Processor::new(message::Direction::SRVPRU)
         }
+    }
+
+    pub fn init() -> anyhow::Result<()>{
+        let mut server = Server::new();
+        let config = crate::srvpru::get_configuration();
+        let plugins:           Vec<&'static str> = config.plugins          .iter().map(|s| s.as_str()).collect();
+        let ctos_handlers:     Vec<&'static str> = config.ctos_handlers    .iter().map(|s| s.as_str()).collect();
+        let stoc_handlers:     Vec<&'static str> = config.stoc_handlers    .iter().map(|s| s.as_str()).collect();
+        let internal_handlers: Vec<&'static str> = config.internal_handlers.iter().map(|s| s.as_str()).collect();
+        server.register_handlers(&plugins, &ctos_handlers, &stoc_handlers, &internal_handlers);
+        info!("{:}", server);
+        SOCKET_SERVER.set(server).ok().expect("Failed to set socket server.");
+        Ok(())
     }
 
     pub fn register_handlers(&mut self, plugins: &[&str], ctos_handlers: &[&str], stoc_handlers: &[&str], internal_handlers: &[&str]) {        
@@ -84,10 +97,12 @@ impl Server {
         }
     }
 
+    /// Start socket server.
     pub async fn start(&'static self) -> anyhow::Result<()> {
         let configuration = crate::srvpru::get_configuration();
         let listener = TcpListener::bind(format!("0.0.0.0:{}", configuration.port)).await?;
         let timeout = tokio::time::Duration::from_secs(configuration.timeout);
+        if trigger_internal(listener.local_addr()?, ServerStart {}).await? { return Ok(()) };
         info!("Socket server started.");
         loop {
             let (socket, addr) = listener.accept().await?;
@@ -101,26 +116,29 @@ impl Server {
                         Ok(data) => data,
                         Err(_) => {
                             if Player::get_player(addr).map(|player| player.lock().timeout_exempt) == Some(true) { continue; }
-                            self.trigger_internal(&addr, srvpru::CtosListenError { error: ListenError::Timeout }).await;
-                            break;
+                            if self.trigger_internal(addr, srvpru::CtosListenError { error: ListenError::Timeout }).await.map_or(true, |block_message| !block_message) { 
+                                break; 
+                            } else { continue }
                         }
                     };
                     let n = match data {
                         Ok(n) if n == 0 => break,
                         Ok(n) => n,
                         Err(e) => {
-                            self.trigger_internal(&addr, srvpru::CtosListenError { error: ListenError::Drop(anyhow::Error::new(e)) }).await;
-                            break
+                            if self.trigger_internal(addr, srvpru::CtosListenError { error: ListenError::Drop(anyhow::Error::new(e)) }).await.map_or(true, |block_message| !block_message) {
+                                break;
+                            } else { continue }
                         }
                     };
                     if n > 10240 { 
-                        self.trigger_internal(&addr, srvpru::CtosProcessError { error: ProcessorError::Oversize }).await;
-                        continue; 
+                        if self.trigger_internal(addr, srvpru::CTOSProcessError { error: ProcessorError::Oversize }).await.map_or(true, |block_message| !block_message) {
+                            break;
+                        } else { continue } 
                     }
                     let result = if let Some(player) = Player::get_player(addr) {
                         // Steal the socket, so that player won't be locked.
                         let mut socket = player.lock().server_stream_writer.take();
-                        let res = server.ctos_processor.process_multiple_messages(&mut socket, &addr, &buf[0..n]).await;
+                        let res = server.ctos_processor.process_multiple_messages(&mut socket, addr, &buf[0..n]).await;
                         // return the socket, player or socket both may disappear.
                         if let (Some(player), Some(_socket)) = (Player::get_player(addr), socket) {
                             player.lock().server_stream_writer.replace(_socket);
@@ -128,12 +146,11 @@ impl Server {
                         res
                     }
                     else {
-                        server.ctos_processor.process_multiple_messages(&mut writer, &addr, &buf[0..n]).await
+                        server.ctos_processor.process_multiple_messages(&mut writer, addr, &buf[0..n]).await
                     };
                     // Some process happen an error
                     if let Err(error) = result {
-                        let break_user = match error { ProcessorError::Abort => true, _ => false };
-                        self.trigger_internal(&addr, srvpru::CtosProcessError { error }).await;
+                        let break_user = match error { ProcessorError::Abort | ProcessorError::ErrorAbort => true, _ => false };
                         if break_user { Player::get_player(addr).map(|player| player.lock().expel()); break; }
                     }
                 };
@@ -141,8 +158,7 @@ impl Server {
                 {
                     let player = { PLAYERS.write().remove(&addr) };
                     if let Some(player) = player {
-                        let player_for_termination = player.clone();
-                        self.trigger_internal(&addr, srvpru::PlayerDestroy { player: player_for_termination }).await;
+                        self.trigger_internal(addr, srvpru::PlayerDestroy { player: player.clone() }).await.ok();
                         if Arc::strong_count(&player) > 4 {
                             let player = player.lock();
                             warn!("Player {} seems still exist reference when drop. This may lead to memory leak.", player);
@@ -153,47 +169,57 @@ impl Server {
         }
     }
 
-
-    async fn trigger_internal<S: Struct + MappedStruct>(&'static self, addr: &SocketAddr, obj: S) -> Option<ProcessorError> {
-        let buf = [0; 0];
-        let mut writer: Option<OwnedWriteHalf> = None;
-        let addr = addr.clone();
-        let mut obj = Some(Box::new(obj) as Box<dyn Struct>);
-        let res = self.internal_processor.process_request(&mut writer, &addr, Some(S::message()), HandlerOccasion::Before, &buf, &mut obj).await.err();
-        if res.is_some() { return res; }
-        self.internal_processor.process_request(&mut writer, &addr, Some(S::message()), HandlerOccasion::After,  &buf, &mut obj).await.err()
-        
-        //if let Err(error) = self.internal_processor.process_request(&mut writer, &addr, Some(S::message()), HandlerOccasion::After, &buf, obj).await {
-        //    self.trigger_internal(&addr, srvpru::InternalProcessError { error }).await;
-        //}
+    async fn trigger_internal<S: Struct + MappedStruct>(&'static self, addr: SocketAddr, obj: S) -> anyhow::Result<bool> {
+        match self.internal_processor.process_internal_message(addr, obj).await {
+            Ok(block_message) => Ok(block_message),
+            Err(error) => Ok(!self.internal_processor.process_internal_message(addr, SRVPRUProcessError { error }).await?)
+        }
     }
 }
 
-pub async fn trigger_internal<S: Struct + MappedStruct>(addr: SocketAddr, obj: S) {
-    let server = get_server();
-    if let Some(error) = server.trigger_internal(&addr, obj).await {
-        server.trigger_internal(&addr, InternalProcessError { error }).await;
+
+// ----------------------------------------------------------------------------------------------------
+//  trigger_internal
+// ----------------------------------------------------------------------------------------------------
+/// Trigger a internal message by call [process_internal_message](Processor#method.process_internal_message).
+/// 
+/// #### Return
+/// A bool, which is last value of [block_message](Context#structfield.block_message).
+/// 
+/// #### If error happens
+/// Trigger a [SRVPRUProcessError] processing immediately, return `Ok(!block_message)`.
+// ----------------------------------------------------------------------------------------------------
+pub async fn trigger_internal<S: Struct + MappedStruct>(addr: SocketAddr, obj: S) -> anyhow::Result<bool> {
+    get_server().trigger_internal(addr, obj).await    
+}
+
+impl std::fmt::Debug for Server {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "")?;
+        writeln!(f, "srvpru socket server")?;
+        writeln!(f, "  CTOS processors:")?;
+        write!(f, "{:<4?}", self.ctos_processor)?;
+        writeln!(f, "  STOC processors:")?;
+        write!(f, "{:<4?}", self.stoc_processor)?;
+        writeln!(f, "  INTERNAL processors:")?;
+        write!(f, "{:<4?}", self.internal_processor)?;
+        Ok(())
     }
 }
 
-pub fn trigger_internal_async<S: Struct + MappedStruct>(addr: SocketAddr, obj: S) -> JoinHandle<()> {
-    tokio::spawn(async move { trigger_internal(addr, obj).await; })
-}
 
 impl std::fmt::Display for Server {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "")?;
         writeln!(f, "srvpru socket server")?;
-        writeln!(f, "  CTOS processors:")?;
-        write!(f, "{:}", self.ctos_processor)?;
-        writeln!(f, "  STOC processors:")?;
-        write!(f, "{:}", self.stoc_processor)?;
-        writeln!(f, "  INTERNAL processors:")?;
-        write!(f, "{:}", self.internal_processor)?;
+        write!(f, "{:<4}", self.ctos_processor)?;
+        write!(f, "{:<4}", self.stoc_processor)?;
+        write!(f, "{:<4}", self.internal_processor)?;
         Ok(())
     }
 }
 
+/// Get current socket server.
 pub fn get_server() -> &'static Server {
     SOCKET_SERVER.get().expect("Socket server not set")
 }

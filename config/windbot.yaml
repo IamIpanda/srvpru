@@ -1,0 +1,5 @@
+server: http://localhost:7999
+bots:
+  - name: "悠悠王"
+    deck: "MokeyMokeyKing"
+    dialog: "mokey.zh-CN"

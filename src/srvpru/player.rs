@@ -1,3 +1,9 @@
+// ============================================================
+//  player
+// ------------------------------------------------------------
+/// Save player.
+// ============================================================
+
 use std::fmt::Display;
 use std::sync::Arc;
 use std::net::SocketAddr;
@@ -30,9 +36,14 @@ lazy_static! {
     pub static ref PLAYER_PRECURSORS: RwLock<HashMap<SocketAddr, PlayerPrecursor>> = RwLock::new(HashMap::new());
 }
 
-
+// ============================================================
+// PlayerPrecursor
+// ------------------------------------------------------------
+// Save basic message before receiving JoinGame.
+// ============================================================
 pub struct PlayerPrecursor {
     pub name: String,
+    pub origin_name: Option<String>,
     pub data_cache: Vec<Vec<u8>>  
 }
 
@@ -40,6 +51,7 @@ impl PlayerPrecursor {
     fn new(name: String, client_addr: SocketAddr, data: &[u8]) {
         let mut precursor = PlayerPrecursor {
             name,
+            origin_name: None,
             data_cache: Vec::new()
         };
         precursor.data_cache.push(data.to_vec());
@@ -50,7 +62,8 @@ impl PlayerPrecursor {
     fn _upgrade(self, client_addr: SocketAddr, room: Arc<Mutex<Room>>) -> (Player, Vec<Vec<u8>>) {
         (
             Player { 
-                room, 
+                room,
+                origin_name: self.origin_name,
                 name: self.name, 
                 client_addr, 
                 client_stream_writer: None, 
@@ -79,6 +92,7 @@ impl PlayerPrecursor {
 #[derive(Debug)]
 pub struct Player {
     pub room: Arc<Mutex<Room>>,
+    pub origin_name: Option<String>,
     pub name: String,
     pub client_addr: SocketAddr,
     pub client_stream_writer: Option<OwnedWriteHalf>,
@@ -126,58 +140,62 @@ impl Player {
                 let data = match tokio::time::timeout(timeout, server_stream_reader.read(&mut buf)).await {
                     Ok(data) => data,
                     Err(_) => {
-                        server::trigger_internal(client_addr, srvpru::StocListenError { error: ListenError::Timeout }).await;
-                        break
+                        if server::trigger_internal(client_addr, srvpru::StocListenError { error: ListenError::Timeout }).await.map_or(true, |block_message| !block_message) { 
+                            break
+                        } else { continue; }
                     }
                 };
                 let n = match data {
                     Ok(n) if n == 0 => break,
                     Ok(n) => n,
                     Err(e) => {
-                        server::trigger_internal(client_addr, srvpru::StocListenError { error: ListenError::Drop(anyhow::Error::new(e)) }).await;
-                        break
+                        if server::trigger_internal(client_addr, srvpru::StocListenError { error: ListenError::Drop(anyhow::Error::new(e)) }).await.map_or(true, |block_message| !block_message) {
+                            break
+                        } else { continue; }
                     }
                 };
                 if n > 10240 { 
-                    server::trigger_internal(client_addr, srvpru::StocListenError { error: ListenError::Oversize }).await;
-                    continue 
+                    if server::trigger_internal(client_addr, srvpru::StocListenError { error: ListenError::Oversize }).await.map_or(true, |block_message| !block_message) {
+                        break;
+                    } else { continue; }
                 }
                 let mut socket = this.lock().client_stream_writer.take();
                 let addr = this.lock().client_addr;
-                let result = crate::srvpru::get_server().stoc_processor.process_multiple_messages(&mut socket, &addr, &buf[0..n]).await;
+                let result = crate::srvpru::get_server().stoc_processor.process_multiple_messages(&mut socket, addr, &buf[0..n]).await;
                 if let Some(socket) = socket { this.lock().client_stream_writer.replace(socket); }
-                if let Err(error) = result {
-                    server::trigger_internal(client_addr, srvpru::StocProcessError { error }).await;
-                }
+                if result.is_err() {
+                    this.lock().expel();
+                } 
             }
         })
     }
 
     fn register_handlers() {
         // Precursor producer
-        Handler::before_message::<ctos::PlayerInfo, _>(10, "player_precursor_producer", |context, request| Box::pin(async move {
-            let name = context.get_string(&request.name, "name")?;
-            PlayerPrecursor::new(name.clone(), context.addr.clone(), &context.request_buffer);
-            Ok(true)
+        Handler::before_message::<ctos::PlayerInfo, _>(255, "player_precursor_producer", |context, message| Box::pin(async move {
+            let name = context.get_string(&message.name, "name")?;
+            PlayerPrecursor::new(name.clone(), context.addr.clone(), &context.message_buffer);
+            context.block_message = true;
+            Ok(false)
         })).register();
 
         // Precursor buffer
         Handler::new(2, "player_precursor_recorder", HandlerOccasion::Before, HandlerCondition::Always, |context| Box::pin(async move {
             let players = PLAYERS.read();
             if ! players.contains_key(&context.addr) {
-                Player::buffer_data_for_precursor(context.addr, context.request_buffer);
+                Player::buffer_data_for_precursor(context.addr, context.message_buffer);
             }
             Ok(false)
         })).register();
 
-        Handler::before_message::<srvpru::PlayerDestroy, _>(255, "player_dropper", |_, request| Box::pin(async move {
-            Player::destroy(&request.player);
+        Handler::before_message::<srvpru::PlayerDestroy, _>(255, "player_dropper", |_, message| Box::pin(async move {
+            Player::destroy(&message.player);
             Ok(false)
         })).register();
 
-        Handler::before_message::<srvpru::PlayerMove, _>(1, "player_mover", |_, request| Box::pin(async move {
-            let mut post_player = request.post_player.lock();
-            let mut new_player = request.new_player.lock();
+        Handler::before_message::<srvpru::PlayerMove, _>(1, "player_mover", |_, message| Box::pin(async move {
+            let mut post_player = message.post_player.lock();
+            let mut new_player = message.new_player.lock();
             // It's not possible to make ygopro server change socket.
             // So just take post player as new.
             post_player.client_addr = new_player.client_addr;
@@ -187,7 +205,7 @@ impl Player {
             // Global query tables.
             let mut players = PLAYERS.write();
             players.remove(&post_player.client_addr);
-            players.insert(new_player.client_addr, request.post_player.clone());
+            players.insert(new_player.client_addr, message.post_player.clone());
             let mut rooms = crate::srvpru::room::ROOMS_BY_CLIENT_ADDR.write();
             if let Some(player) = rooms.remove(&post_player.client_addr) {
                 rooms.insert(new_player.client_addr, player);
@@ -199,9 +217,9 @@ impl Player {
         Handler::register_handlers("player", message::Direction::SRVPRU, vec!("player_dropper", "player_mover"));
     }
 
-    pub fn buffer_data_for_precursor(client_addr: &SocketAddr, data: &[u8]) -> bool {
+    pub fn buffer_data_for_precursor(client_addr: SocketAddr, data: &[u8]) -> bool {
         let mut precursors = PLAYER_PRECURSORS.write();
-        if let Some(precursor) = precursors.get_mut(client_addr) {
+        if let Some(precursor) = precursors.get_mut(&client_addr) {
             precursor.data_cache.push(data.to_vec());   
             true
         }
@@ -209,7 +227,7 @@ impl Player {
     }
 
     // ----------------------------------------------------------------------------------------------------
-    /// ## destroy
+    //  destroy
     // ----------------------------------------------------------------------------------------------------
     /// Try to drop that player.
     /// 
@@ -217,13 +235,14 @@ impl Player {
     /// - stop read from ygopro server.
     /// - remove itself from room.
     /// - remove itself from room query table.
+    /// - disconnect from room, if have one.
     /// 
     /// `destroy` **WON'T** do following things:
     /// - remove itself from PLAYERS. (Done by Server)
     /// - drop itself. (RC)
     // ----------------------------------------------------------------------------------------------------
     pub fn destroy(this: &Arc<Mutex<Player>>) {
-        let _self = this.lock();
+        let mut _self = this.lock();
         info!("Destroying {}.", _self.name);
         _self.reader_handler.abort();
         {
@@ -233,10 +252,11 @@ impl Player {
             }
         }
         ROOMS_BY_CLIENT_ADDR.write().remove(&_self.client_addr);
+        _self.server_stream_writer.take();
     }
 
     // ----------------------------------------------------------------------------------------------------
-    /// ## expel 
+    //  expel 
     // ----------------------------------------------------------------------------------------------------
     /// Kick player out.
     /// return `true` if it may success.
@@ -248,6 +268,7 @@ impl Player {
     /// Then, client stream reader will stop, raise an zero length, and the gear moves.
     // ------------------------------------------------------------------------------------------------------
     pub fn expel(&mut self) -> bool {
+        info!("Player {:} is expeled.", self.name);
         self.client_stream_writer.take().is_some()
         // No need to shut down here, tokio document say:
         // `Dropping the write half will shutdown the write half of the TCP stream.`
@@ -270,6 +291,23 @@ impl Display for Player {
     }
 }
 
+impl Player {
+    pub fn try_set_origin_name(&mut self, name: String) -> bool {
+        if self.origin_name.is_some() { return false; }
+        self.origin_name = Some(name);
+        return true;
+    }
+}
+// ----------------------------------------------------------------------------------------------------
+// player_attach!
+// ----------------------------------------------------------------------------------------------------
+/// Set a attachment of the [`Player`].
+/// 
+/// `player_attach!` use player addr as key, generate a `PlayerAttachment` struct.
+/// All fields must implement `Default`.
+/// 
+/// #### Example
+// ----------------------------------------------------------------------------------------------------
 #[macro_export]
 macro_rules! player_attach {
     ($( $(#[$attr:meta])* $field:ident:$type:ty ),*) => {
@@ -295,16 +333,16 @@ macro_rules! player_attach {
         #[doc(hidden)]
         #[allow(dead_code)]
         fn insert_player_attachment<'a>(context: &crate::srvpru::Context<'a>, $($field: $type,)*) {
-            PLAYER_ATTACHMENTS.write().insert(context.addr.clone(), PlayerAttachment { $($field,)* });
+            PLAYER_ATTACHMENTS.write().insert(context.addr, PlayerAttachment { $($field,)* });
         }
 
         #[doc(hidden)]
         fn _get_player_attachment<'a, 'b>(context: &crate::srvpru::Context<'a>, sure: bool) -> Option<parking_lot::MappedRwLockWriteGuard<'b, PlayerAttachment>> {
-            if !contains_player_attachment(context.addr) { 
+            if !contains_player_attachment(&context.addr) { 
                 if !sure { return None; }
-                PLAYER_ATTACHMENTS.write().insert(context.addr.clone(), PlayerAttachment::default());
+                PLAYER_ATTACHMENTS.write().insert(context.addr, PlayerAttachment::default());
             }
-            Some(parking_lot::RwLockWriteGuard::map(PLAYER_ATTACHMENTS.write(), |player_attachments| player_attachments.get_mut(context.addr).unwrap()))
+            Some(parking_lot::RwLockWriteGuard::map(PLAYER_ATTACHMENTS.write(), |player_attachments| player_attachments.get_mut(&context.addr).unwrap()))
         }
         
         /// get attached value on player for this plugin.
@@ -343,8 +381,8 @@ macro_rules! player_attach {
         fn register_player_attachment_dropper() {
             let plugin_name = std::path::Path::new(file!()).file_stem().unwrap().to_str().unwrap();
             let dropper_name = format!("{}_player_attachment_dropper", plugin_name);
-            srvpru_handler!(crate::ygopro::message::srvpru::PlayerDestroy, |_, request| {
-                drop_player_attachment(request);
+            srvpru_handler!(crate::ygopro::message::srvpru::PlayerDestroy, |_, message| {
+                drop_player_attachment(message);
             }).register_as(&dropper_name);
             crate::srvpru::Handler::register_handlers(plugin_name, crate::ygopro::message::Direction::SRVPRU, vec![&dropper_name]);
         }
@@ -354,19 +392,30 @@ macro_rules! player_attach {
         fn register_player_attachment_mover() {
             let plugin_name = std::path::Path::new(file!()).file_stem().unwrap().to_str().unwrap();
             let mover_name = format!("{}_player_attachment_mover", plugin_name);
-            srvpru_handler!(crate::ygopro::message::srvpru::PlayerMove, |_, request| {
-                move_player_attachment(request);
+            srvpru_handler!(crate::ygopro::message::srvpru::PlayerMove, |_, message| {
+                move_player_attachment(message);
             }).register_as(&mover_name);
             crate::srvpru::Handler::register_handlers(plugin_name, crate::ygopro::message::Direction::SRVPRU, vec![&mover_name])
         }
     };
 }
 
+#[doc(hidden)]
 macro_rules! player_attachment_return_type {
     () => { Option<parking_lot::MappedRwLockWriteGuard<'b, PlayerAttachment>> };
     ($type: ty) => { $type }
 }
 
+// ----------------------------------------------------------------------------------------------------
+// export_player_attach_as!
+// ----------------------------------------------------------------------------------------------------
+/// Export player attachment via a function.
+/// 
+/// * With only one parameter `$ident`: export a function named `$ident` return a 
+/// [MappedRwLockWriteGuard](parking_lot::MappedRwLockWriteGuard).
+/// * With a parameter `$ident` and a `transformer` function: export a function named `$ident`, 
+/// and transform it before return.
+//  ---------------------------------------------------------------------------------------------------- 
 #[macro_export]
 macro_rules! export_player_attach_as {
     ($name: ident$(, $type: ty, $transformer: ident)?) => {
@@ -386,7 +435,7 @@ macro_rules! export_player_attach_as {
             #[allow(dead_code)]
             pub fn $name<'b>(&self) -> player_attachment_return_type!($($type)?) {
                 let result = if !contains_player_attachment(&self.addr) { None }
-                else { Some(parking_lot::RwLockWriteGuard::map(PLAYER_ATTACHMENTS.write(), |player_attachments| player_attachments.get_mut(self.addr).unwrap())) };
+                else { Some(parking_lot::RwLockWriteGuard::map(PLAYER_ATTACHMENTS.write(), |player_attachments| player_attachments.get_mut(&self.addr).unwrap())) };
                 $(let result = $transformer(result);)?
                 result
             }

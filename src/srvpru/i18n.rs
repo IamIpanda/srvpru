@@ -1,10 +1,19 @@
-use std::collections::HashMap;
+// ============================================================
+//! ## i18n
+// ------------------------------------------------------------
+//! Place terms, which change in chats.
+// ============================================================
 
+use std::collections::HashMap;
 use once_cell::sync::OnceCell;
 
 use crate::srvpru::plugins;
 
 pub static INTERNATIONAL_LIBRARY: OnceCell<HashMap<String, HashMap<String, String>>> = OnceCell::new();
+
+pub fn init() -> anyhow::Result<()> {
+    load_configuration()
+}
 
 pub fn load_configuration() -> anyhow::Result<()> {
     info!("Loading i18n directory...");
@@ -21,6 +30,7 @@ pub fn load_configuration() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Replace {xxxx} in the string.
 pub fn render(template: &str, locale: &str) -> String {
     let international_library = INTERNATIONAL_LIBRARY.get().expect("i18n library haven't set yet.");
     let mut answer_string = template.to_string();

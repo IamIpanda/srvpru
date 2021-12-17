@@ -1,24 +1,49 @@
+// ============================================================
+//  struct
+// ------------------------------------------------------------
+/// Offer basic contracts and structs for message.
+// ============================================================
 use serde::Serialize;
 use serde::Deserialize;
 use crate::ygopro::message::MessageType;
 
+// ------------------------------------------------------------
+//  Struct
+// ------------------------------------------------------------
+/// Every part of the ygopro message need to impl Struct.
+/// 
+/// No actual content.
+// ------------------------------------------------------------
 pub trait Struct : erased_serde::Serialize + downcast_rs::DowncastSync + Sync + std::fmt::Debug + 'static { 
     
 }
-pub trait MappedStruct {
+
+// ------------------------------------------------------------
+//  MappedStruct
+// ------------------------------------------------------------
+/// MappedStruct means this struct can be mapped to a specific
+/// [MessageType].
+// ------------------------------------------------------------
+pub trait MappedStruct: Struct {
     fn message() -> MessageType;
 }
 
 impl_downcast!(sync Struct);
 serialize_trait_object!(Struct);
 
+
+// ------------------------------------------------------------
+//  Empty
+// ------------------------------------------------------------
+/// [`Struct`] null.
+// ------------------------------------------------------------
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Empty {
 
 }
 impl Struct for Empty { }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, serde_default)]
 #[repr(C)]
 pub struct HostInfo {
     #[serde(default="HostInfo::default_lflist")]

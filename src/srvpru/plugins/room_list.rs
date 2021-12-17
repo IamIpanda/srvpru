@@ -8,7 +8,6 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::Router;
 use axum::extract::ConnectInfo;
 use axum::extract::ws::Message;
 use axum::extract::ws::WebSocket;
@@ -24,6 +23,7 @@ use parking_lot::Mutex;
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::srvpru::CommonError;
 use crate::ygopro::Netplayer;
 use crate::ygopro::message::Direction;
 use crate::ygopro::message::HostInfo;
@@ -33,6 +33,8 @@ use crate::srvpru::Handler;
 use crate::srvpru::Room;
 use crate::srvpru::message::RoomDestroy;
 use crate::srvpru::message::RoomCreated;
+use crate::srvpru::plugins::plugin_enabled;
+use crate::srvpru::plugins::base::api::register_api;
 
 set_configuration! {
     #[serde(default="default_port")]
@@ -41,24 +43,29 @@ set_configuration! {
 
 fn default_port() -> u32 { 7922 }
 
+depend_on! {
+    "api"
+}
+
 pub fn init() -> anyhow::Result<()> {
     load_configuration()?;
+    register_dependency()?;
     register_handlers();
-    start_server();
+    register_apis();
     Ok(())
 }
 
 fn register_handlers() {
     Handler::before_message::<RoomCreated, _>(255, "room_list_create_listener", |context, _| Box::pin(async move {
-        broadcast_room("create".to_string(), context.get_room().ok_or(anyhow!("Cannot get the room"))?);
+        broadcast_room("create".to_string(), context.get_room().ok_or(CommonError::RoomNotExist)?.clone());
         Ok(false)
     })).register();
     Handler::before_message::<RoomDestroy, _>(95, "room_list_destroy_listener", |context, _| Box::pin(async move {
-        broadcast_room("delete".to_string(), context.get_room().ok_or(anyhow!("Cannot get the room"))?);
+        broadcast_room("delete".to_string(), context.get_room().ok_or(CommonError::RoomNotExist)?.clone());
         Ok(false)
     })).register();
     Handler::before_message::<JoinGame, _>(255, "room_list_update_listener", |context, _| Box::pin(async move {
-        broadcast_room("update".to_string(), context.get_room().ok_or(anyhow!("Cannot get the room"))?);
+        broadcast_room("update".to_string(), context.get_room().ok_or(CommonError::RoomNotExist)?.clone());
         Ok(false)
     })).register();
 
@@ -107,16 +114,9 @@ lazy_static! {
     pub static ref WEBSOCKETS: Mutex<HashMap<SocketAddr, SplitSink<WebSocket, Message>>> = Mutex::new(HashMap::new());
 }
 
-fn start_server() {
-    if !crate::srvpru::get_configuration().plugins.contains(&"room_list".to_string()) { return; }
-    let app = Router::new().route("/", routing::get(server_main_handler));
-    let configuration = get_configuration();
-    tokio::spawn(async move {
-        axum::Server::bind(&format!("0.0.0.0:{}", configuration.port).parse().unwrap())
-        .serve(app.into_make_service_with_connect_info::<SocketAddr, _>())
-        .await
-        .unwrap();
-    });
+fn register_apis() {
+    if ! plugin_enabled("room_list") { return; }
+    register_api(|router| router.route("/roomlist", routing::get(server_main_handler)));
 }
 
 async fn server_main_handler(ws: WebSocketUpgrade, ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl IntoResponse {
@@ -137,7 +137,10 @@ async fn server_main_handler(ws: WebSocketUpgrade, ConnectInfo(addr): ConnectInf
 
 async fn send_all_rooms(socket: &mut WebSocket) {
     let rooms = crate::srvpru::ROOMS.read();
-    let rooms_value: Vec<Value> = rooms.iter().map(|(_, room)| serde_json::to_value(room.lock().generate_room_list_data()).unwrap_or_default()).collect();
+    let rooms_value: Vec<Value> = rooms.iter()
+        .filter(|(_, room)| ! room.lock().flags.contains_key("private"))
+        .map(|(_, room)| serde_json::to_value(room.lock().generate_room_list_data()).unwrap_or_default())
+        .collect();
     let value = Value::Object(vec![
         ("event".to_string(), Value::String("init".to_string())),
         ("data".to_string(),  Value::Array(rooms_value))
@@ -146,6 +149,7 @@ async fn send_all_rooms(socket: &mut WebSocket) {
 }
 
 fn broadcast_room(event: String, room: Arc<Mutex<Room>>) {
+    if room.lock().flags.contains_key("private") { return; }
     tokio::spawn(async move {
         broadcast_message(serde_json::to_string(&WebSocketMessage { event, data: room.lock().generate_room_list_data() }).unwrap_or_default()).await;
     });

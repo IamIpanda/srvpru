@@ -1,3 +1,9 @@
+// ============================================================
+//  game_message / gm
+// ------------------------------------------------------------
+/// Specific message for [GameMessage].
+// ============================================================
+
 use serde::Serialize;
 use serde::Deserialize;
 use serde::ser::Serializer;
@@ -12,6 +18,7 @@ use crate::ygopro::Position;
 use crate::ygopro::message::Struct;
 use crate::ygopro::message::MappedStruct;
 use crate::ygopro::message::Empty;
+use crate::ygopro::message::GreedyVector;
 
 pub type MessageType = crate::ygopro::GameMessage;
 
@@ -26,6 +33,18 @@ impl MappedStruct for GameMessage {
     fn message() -> crate::ygopro::message::MessageType {
         return crate::ygopro::message::MessageType::STOC(crate::ygopro::message::stoc::MessageType::GameMessage);
     }
+}
+
+impl GameMessage {
+   pub fn from_child_message<S: Struct + MappedStruct>(message: S) -> GameMessage {
+        GameMessage {
+            kind: match S::message() {
+                crate::ygopro::message::MessageType::GM(message_type) => message_type,
+                _ => panic!("Try to wrap a wrong message to GameMessage")
+            },
+            message: Box::new(message)
+        }
+   }
 }
 
 impl Serialize for GameMessage {
@@ -83,7 +102,7 @@ impl<'de> Deserialize<'de> for GameMessage {
                     // MessageType::SortCard           => self.deserialize_message::<SortCard,           _>(&mut seq)?,
                     // MessageType::SelectUnselectCard => self.deserialize_message::<SelectUnselectCard, _>(&mut seq)?,
                     // MessageType::ConfirmDecktop     => self.deserialize_message::<ConfirmDecktop,     _>(&mut seq)?,
-                    // MessageType::ConfirmCards       => self.deserialize_message::<ConfirmCards,       _>(&mut seq)?,
+                       MessageType::ConfirmCards       => self.deserialize_message::<ConfirmCards,       _>(&mut seq)?,
                     // MessageType::ShuffleHand        => self.deserialize_message::<ShuffleHand,        _>(&mut seq)?,
                     // MessageType::RefreshDeck        => self.deserialize_message::<RefreshDeck,        _>(&mut seq)?,
                     // MessageType::SwapGraveDeck      => self.deserialize_message::<SwapGraveDeck,      _>(&mut seq)?,
@@ -106,13 +125,13 @@ impl<'de> Deserialize<'de> for GameMessage {
                     // MessageType::Flipsummoning      => self.deserialize_message::<Flipsummoning,      _>(&mut seq)?,
                     // MessageType::Flipsummoned       => self.deserialize_message::<Flipsummoned,       _>(&mut seq)?,
                        MessageType::Chaining           => self.deserialize_message::<Chaining,           _>(&mut seq)?,
-                    // MessageType::Chained            => self.deserialize_message::<Chained,            _>(&mut seq)?,
-                    // MessageType::ChainSolving       => self.deserialize_message::<ChainSolving,       _>(&mut seq)?,
-                    // MessageType::ChainSolved        => self.deserialize_message::<ChainSolved,        _>(&mut seq)?,
-                    // MessageType::ChainEnd           => self.deserialize_message::<ChainEnd,           _>(&mut seq)?,
-                    // MessageType::ChainNegated       => self.deserialize_message::<ChainNegated,       _>(&mut seq)?,
-                    // MessageType::ChainDisabled      => self.deserialize_message::<ChainDisabled,      _>(&mut seq)?,
-                    // MessageType::CardSelected       => self.deserialize_message::<CardSelected,       _>(&mut seq)?,
+                       MessageType::Chained            => self.deserialize_message::<Chained,            _>(&mut seq)?,
+                       MessageType::ChainSolving       => self.deserialize_message::<ChainSolving,       _>(&mut seq)?,
+                       MessageType::ChainSolved        => self.deserialize_message::<ChainSolved,        _>(&mut seq)?,
+                       MessageType::ChainEnd           => self.deserialize_message::<ChainEnd,           _>(&mut seq)?,
+                       MessageType::ChainNegated       => self.deserialize_message::<ChainNegated,       _>(&mut seq)?,
+                       MessageType::ChainDisabled      => self.deserialize_message::<ChainDisabled,      _>(&mut seq)?,
+                       MessageType::CardSelected       => self.deserialize_message::<CardSelected,       _>(&mut seq)?,
                     // MessageType::RandomSelected     => self.deserialize_message::<RandomSelected,     _>(&mut seq)?,
                     // MessageType::BecomeTarget       => self.deserialize_message::<BecomeTarget,       _>(&mut seq)?,
                     // MessageType::Draw               => self.deserialize_message::<Draw,               _>(&mut seq)?,
@@ -148,7 +167,7 @@ impl<'de> Deserialize<'de> for GameMessage {
                     // MessageType::ReloadField        => self.deserialize_message::<ReloadField,        _>(&mut seq)?,
                     // MessageType::AiName             => self.deserialize_message::<AiName,             _>(&mut seq)?,
                     // MessageType::ShowHint           => self.deserialize_message::<ShowHint,           _>(&mut seq)?,
-                    // MessageType::MatchKill          => self.deserialize_message::<MatchKill,          _>(&mut seq)?,
+                       MessageType::MatchKill          => self.deserialize_message::<MatchKill,          _>(&mut seq)?,
                     // MessageType::CustomMsg          => self.deserialize_message::<CustomMsg,          _>(&mut seq)?,
                     _                               => self.deserialize_message::<Empty,         _>(&mut seq)?,
                 }.ok_or_else(|| serde::de::Error::invalid_length(1, &self))?;
@@ -183,6 +202,23 @@ pub struct Win {
 // #[gm]
 pub struct Start {
     pub _type: u8
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+pub struct ConfirmCard {
+    pub code: i32,
+    pub controller: Netplayer,
+    pub location: Location,
+    pub sequence: i8
+}
+impl Struct for ConfirmCard {}
+
+#[derive(Serialize, Deserialize, Debug, Struct)]
+pub struct ConfirmCards {
+    pub player: Netplayer,
+    pub count: i8,
+    #[serde(with = "GreedyVector::<65536>")]
+    pub cards: Vec<ConfirmCard>
 }
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
@@ -233,6 +269,37 @@ pub struct Chaining {
 }
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
+pub struct Chained {
+    pub chain_index: i8
+}
+
+#[derive(Serialize, Deserialize, Debug, Struct)]
+pub struct ChainSolving {
+    pub chain_index: i8
+}
+
+#[derive(Serialize, Deserialize, Debug, Struct)]
+pub struct ChainSolved {
+    pub chain_index: i8
+}
+
+#[derive(Serialize, Deserialize, Debug, Struct)]
+pub struct ChainEnd;
+
+#[derive(Serialize, Deserialize, Debug, Struct)]
+pub struct ChainNegated {
+    pub chain_index: i8
+}
+
+#[derive(Serialize, Deserialize, Debug, Struct)]
+pub struct ChainDisabled {
+    pub chain_index: i8
+}
+
+#[derive(Serialize, Deserialize, Debug, Struct)]
+pub struct CardSelected;
+
+#[derive(Serialize, Deserialize, Debug, Struct)]
 pub struct Damage {
     pub player: Netplayer,
     pub value: i32
@@ -254,6 +321,11 @@ pub struct Lpupdate {
 pub struct PayLpcost {
     pub player: Netplayer,
     pub cost: i32
+}
+
+#[derive(Serialize, Deserialize, Debug, Struct)]
+pub struct MatchKill {
+    pub reason: i32
 }
 
 pub fn generate_message_type(_type: MessageType) -> crate::ygopro::message::MessageType {

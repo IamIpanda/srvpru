@@ -1,4 +1,8 @@
 #![allow(dead_code)]
+#![allow(non_upper_case_globals)]
+
+use serde::Serialize;
+use serde::Deserialize;
 use serde_repr::Serialize_repr;
 use serde_repr::Deserialize_repr;
 use num_enum::IntoPrimitive;
@@ -29,13 +33,66 @@ impl std::default::Default for Netplayer {
     }
 }
 
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
-#[repr(u8)]
+// Great fukcing structure design need great adapter codes.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum PlayerChange {
-    Observe = 8,
-    Ready = 9,
-    Notready = 10,
-    Leave = 11,
+    Enter(Netplayer),
+    Observe(Netplayer),
+    Ready(Netplayer),
+    Notready(Netplayer),
+    Leave(Netplayer),
+}
+
+impl PlayerChange {
+    fn asu8(&self) -> u8 {
+        match *self {
+            PlayerChange::Enter(player) => player as u8,
+            PlayerChange::Observe(player) => player as u8 * 16 + 8,
+            PlayerChange::Ready(player) => player as u8 * 16 + 9,
+            PlayerChange::Notready(player) => player as u8 * 16 + 10,
+            PlayerChange::Leave(player) => player as u8 * 16 + 11,
+        }
+    }
+}
+
+impl num_enum::TryFromPrimitive for PlayerChange {
+    type Primitive = u8;
+    const NAME: &'static str = "PlayerChange";
+    fn try_from_primitive(source: Self::Primitive) -> Result<Self, num_enum::TryFromPrimitiveError<Self>> {
+        if source < 8 { return Netplayer::try_from_primitive(source).map_or_else(|_| Err(num_enum::TryFromPrimitiveError { number: source }), |t| Ok(PlayerChange::Enter(t))) }
+        let position = (source & 0xf0) >> 4;
+        let player = match Netplayer::try_from_primitive(position) {
+            Ok(player) => player,
+            Err(_) => return Err(num_enum::TryFromPrimitiveError { number: source })
+        };
+        let operation = source & 0xf;
+        match operation {
+            8 => Ok(PlayerChange::Observe(player)),
+            9 => Ok(PlayerChange::Ready(player)),
+            10 => Ok(PlayerChange::Notready(player)),
+            11 => Ok(PlayerChange::Leave(player)),
+            _ => Err(num_enum::TryFromPrimitiveError { number: source })
+        }
+    }
+}
+
+impl std::convert::Into<u8> for PlayerChange {
+    fn into(self) -> u8 {
+        self.asu8()
+    }
+}
+
+impl serde::Serialize for PlayerChange {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
+        serializer.serialize_u8(self.asu8())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for PlayerChange {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: serde::Deserializer<'de> {
+        let value = <u8 as serde::Deserialize>::deserialize(deserializer)?;
+        PlayerChange::try_from_primitive(value).map_err(|_| serde::de::Error::custom("Invalid playerchange value"))
+    }
 }
 
 #[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
@@ -58,6 +115,7 @@ pub enum Mode {
 #[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
 #[repr(u8)]
 pub enum Location {
+    Limbo = 0,
     Deck = 1,
     Hand = 2,
     MZone = 4,
@@ -87,7 +145,7 @@ pub enum Position {
     // NoFlipEffect = 65536
 }
 
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug, Hash)]
+#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, TryFromPrimitive, IntoPrimitive, Debug, Hash)]
 #[repr(u8)]
 pub enum GameMessage {
     Retry = 1,
@@ -187,218 +245,228 @@ pub enum GameMessage {
 
 pub type GMMessageType = GameMessage;
 
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
-#[repr(u32)]
-pub enum Timing {
-    DrawPhase = 1,
-    StandbyPhase = 2,
-    MainEnd = 4,
-    BattleStart = 8,
-    BattleEnd = 16,
-    EndPhase = 32,
-    Summon = 64,
-    Spsummon = 128,
-    Flipsummon = 256,
-    Mset = 512,
-    Sset = 1024,
-    PosChange = 2048,
-    Attack = 4096,
-    DamageStep = 8192,
-    DamageCal = 16384,
-    ChainEnd = 32768,
-    Draw = 65536,
-    Damage = 131072,
-    Recover = 262144,
-    Destroy = 524288,
-    Remove = 1048576,
-    Tohand = 2097152,
-    Todeck = 4194304,
-    Tograve = 8388608,
-    BattlePhase = 16777216,
-    Equip = 33554432,
+bitflags! {
+    #[derive(Serialize, Deserialize)]
+    pub struct Timing: u32 {
+        const DrawPhase = 1;
+        const StandbyPhase = 2;
+        const MainEnd = 4;
+        const BattleStart = 8;
+        const BattleEnd = 16;
+        const EndPhase = 32;
+        const Summon = 64;
+        const Spsummon = 128;
+        const Flipsummon = 256;
+        const Mset = 512;
+        const Sset = 1024;
+        const PosChange = 2048;
+        const Attack = 4096;
+        const DamageStep = 8192;
+        const DamageCal = 16384;
+        const ChainEnd = 32768;
+        const Draw = 65536;
+        const Damage = 131072;
+        const Recover = 262144;
+        const Destroy = 524288;
+        const Remove = 1048576;
+        const Tohand = 2097152;
+        const Todeck = 4194304;
+        const Tograve = 8388608;
+        const BattlePhase = 16777216;
+        const Equip = 33554432;
+    }
 }
 
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
-#[repr(u32)]
-pub enum Type {
-    Monster = 1,
-    Spell = 2,
-    Trap = 4,
-    Normal = 16,
-    Effect = 32,
-    Fusion = 64,
-    Ritual = 128,
-    Trapmonster = 256,
-    Spirit = 512,
-    Union = 1024,
-    Dual = 2048,
-    Tuner = 4096,
-    Synchro = 8192,
-    Token = 16384,
-    Quickplay = 65536,
-    Continuous = 131072,
-    Equip = 262144,
-    Field = 524288,
-    Counter = 1048576,
-    Flip = 2097152,
-    Toon = 4194304,
-    Xyz = 8388608,
-    Pendulum = 16777216,
-    Spsummon = 33554432,
-    Link = 67108864,
-}
-
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
-#[repr(u32)]
-pub enum Race {
-    Warrior = 1,
-    Spellcaster = 2,
-    Fairy = 4,
-    Fiend = 8,
-    Zombie = 16,
-    Machine = 32,
-    Aqua = 64,
-    Pyro = 128,
-    Rock = 256,
-    Windbeast = 512,
-    Plant = 1024,
-    Insect = 2048,
-    Thunder = 4096,
-    Dragon = 8192,
-    Beast = 16384,
-    Beastwarrior = 32768,
-    Dinosaur = 65536,
-    Fish = 131072,
-    Seaserpent = 262144,
-    Reptile = 524288,
-    Psycho = 1048576,
-    Devine = 2097152,
-    Creatorgod = 4194304,
-    Wyrm = 8388608,
-    Cybers = 16777216,
-}
-
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
-#[repr(u32)]
-pub enum Reason {
-    Destroy = 0x1,
-    Release = 0x2,
-    Temporary = 0x4,
-    Material = 0x8,
-    Summon = 0x10,
-    Battle = 0x20,
-    Effect = 0x40,
-    Cost = 0x80,
-    Adjust = 0x100,
-    LostTarget = 0x200,
-    Rule = 0x400,
-    Spsummon = 0x800,
-    Dissummon = 0x1000,
-    Flip = 0x2000,
-    Discard = 0x4000,
-    Rdamage = 0x8000,
-    Rrecover = 0x10000,
-    Return = 0x20000,
-    Fusion = 0x40000,
-    Synchro = 0x80000,
-    Ritual = 0x100000,
-    Xyz = 0x200000,
-    Replace = 0x1000000,
-    Draw = 0x2000000,
-    Redirect = 0x4000000,
-    Reveal = 0x8000000,
-    Link = 0x10000000,
-    LostOverlay = 0x20000000
-}
-
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
-#[repr(u32)]
-pub enum Status {
-    Disabled = 0x0001,
-    ToEnable = 0x0002,
-    ToDisable = 0x0004,
-    ProcComplete = 0x0008,
-    SetTurn = 0x0010,
-    NoLevel = 0x0020,
-    BattleResult = 0x0040,
-    SpsummonStep = 0x0080,
-    FormChanged = 0x0100,
-    Summoning = 0x0200,
-    EffectEnabled = 0x0400,
-    SummonTurn = 0x0800,
-    DestroyConfirmed = 0x1000,
-    LeaveConfirmed = 0x2000,
-    BattleDestroyed = 0x4000,
-    CopyingEffect = 0x8000,
-    Chaining = 0x10000,
-    SummonDisabled = 0x20000,
-    ActivateDisabled = 0x40000,
-    EffectReplaced = 0x80000,
-    FutureFusion = 0x100000,
-    AttackCanceled = 0x200000,
-    Initializing = 0x400000,
-    Activated = 0x800000,
-    JustPos = 0x1000000,
-    ContinuousPos = 0x2000000,
-    Forbidden = 0x4000000,
-    ActFromHand = 0x8000000,
-    OppoBattle = 0x10000000,
-    FlipSummonTurn = 0x20000000,
-    SpsummonTurn = 0x40000000,
-}
-
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
-#[repr(u32)]
-pub enum Query {
-    Code = 0x1,
-    Position = 0x2,
-    Alias = 0x4,
-    Type = 0x8,
-    Level = 0x10,
-    Rank = 0x20,
-    Attribute = 0x40,
-    Race = 0x80,
-    Attack = 0x100,
-    Defense = 0x200,
-    BaseAttack = 0x400,
-    BaseDefense = 0x800,
-    Reason = 0x1000,
-    ReasonCard = 0x2000,
-    EquipCard = 0x4000,
-    TargetCard = 0x8000,
-    OverlayCard = 0x10000,
-    Counters = 0x20000,
-    Owner = 0x40000,
-    Status = 0x80000,
-    Lscale = 0x200000,
-    Rscale = 0x400000,
-    Link = 0x800000
-}
-
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
-#[repr(u32)]
-pub enum Attribute {
-    Earth = 1,
-    Water = 2,
-    Fire = 4,
-    Wind = 8,
-    Light = 16,
-    Dark = 32,
-    Devine = 64,
+bitflags! {
+    #[derive(Serialize, Deserialize)]
+    pub struct Type: u32 {
+        const Monster = 1;
+        const Spell = 2;
+        const Trap = 4;
+        const Normal = 16;
+        const Effect = 32;
+        const Fusion = 64;
+        const Ritual = 128;
+        const Trapmonster = 256;
+        const Spirit = 512;
+        const Union = 1024;
+        const Dual = 2048;
+        const Tuner = 4096;
+        const Synchro = 8192;
+        const Token = 16384;
+        const Quickplay = 65536;
+        const Continuous = 131072;
+        const Equip = 262144;
+        const Field = 524288;
+        const Counter = 1048576;
+        const Flip = 2097152;
+        const Toon = 4194304;
+        const Xyz = 8388608;
+        const Pendulum = 16777216;
+        const Spsummon = 33554432;
+        const Link = 67108864;
+    }
 }
 
 
-#[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
-#[repr(u32)]
-pub enum Linkmarkers {
-    BottomLeft = 1,
-    Bottom = 2,
-    BottomRight = 4,
-    Left = 8,
-    Right = 32,
-    TopLeft = 64,
-    Top = 128,
-    TopRight = 256,
+bitflags! {
+    #[derive(Serialize, Deserialize)]
+    pub struct Race: u32 {
+        const Warrior = 1;
+        const Spellcaster = 2;
+        const Fairy = 4;
+        const Fiend = 8;
+        const Zombie = 16;
+        const Machine = 32;
+        const Aqua = 64;
+        const Pyro = 128;
+        const Rock = 256;
+        const Windbeast = 512;
+        const Plant = 1024;
+        const Insect = 2048;
+        const Thunder = 4096;
+        const Dragon = 8192;
+        const Beast = 16384;
+        const Beastwarrior = 32768;
+        const Dinosaur = 65536;
+        const Fish = 131072;
+        const Seaserpent = 262144;
+        const Reptile = 524288;
+        const Psycho = 1048576;
+        const Devine = 2097152;
+        const Creatorgod = 4194304;
+        const Wyrm = 8388608;
+        const Cybers = 16777216;
+    }
+}
+
+
+bitflags! {
+    #[derive(Serialize, Deserialize)]
+    pub struct Reason: u32 {
+        const Destroy = 0x1;
+        const Release = 0x2;
+        const Temporary = 0x4;
+        const Material = 0x8;
+        const Summon = 0x10;
+        const Battle = 0x20;
+        const Effect = 0x40;
+        const Cost = 0x80;
+        const Adjust = 0x100;
+        const LostTarget = 0x200;
+        const Rule = 0x400;
+        const Spsummon = 0x800;
+        const Dissummon = 0x1000;
+        const Flip = 0x2000;
+        const Discard = 0x4000;
+        const Rdamage = 0x8000;
+        const Rrecover = 0x10000;
+        const Return = 0x20000;
+        const Fusion = 0x40000;
+        const Synchro = 0x80000;
+        const Ritual = 0x100000;
+        const Xyz = 0x200000;
+        const Replace = 0x1000000;
+        const Draw = 0x2000000;
+        const Redirect = 0x4000000;
+        const Reveal = 0x8000000;
+        const Link = 0x10000000;
+        const LostOverlay = 0x20000000;
+    }
+}
+
+bitflags! {
+    #[derive(Serialize, Deserialize)]
+    pub struct Status: u32 {
+        const Disabled = 0x0001;
+        const ToEnable = 0x0002;
+        const ToDisable = 0x0004;
+        const ProcComplete = 0x0008;
+        const SetTurn = 0x0010;
+        const NoLevel = 0x0020;
+        const BattleResult = 0x0040;
+        const SpsummonStep = 0x0080;
+        const FormChanged = 0x0100;
+        const Summoning = 0x0200;
+        const EffectEnabled = 0x0400;
+        const SummonTurn = 0x0800;
+        const DestroyConfirmed = 0x1000;
+        const LeaveConfirmed = 0x2000;
+        const BattleDestroyed = 0x4000;
+        const CopyingEffect = 0x8000;
+        const Chaining = 0x10000;
+        const SummonDisabled = 0x20000;
+        const ActivateDisabled = 0x40000;
+        const EffectReplaced = 0x80000;
+        const FutureFusion = 0x100000;
+        const AttackCanceled = 0x200000;
+        const Initializing = 0x400000;
+        const Activated = 0x800000;
+        const JustPos = 0x1000000;
+        const ContinuousPos = 0x2000000;
+        const Forbidden = 0x4000000;
+        const ActFromHand = 0x8000000;
+        const OppoBattle = 0x10000000;
+        const FlipSummonTurn = 0x20000000;
+        const SpsummonTurn = 0x40000000;
+    }
+}
+
+bitflags! {
+    #[derive(Serialize, Deserialize)]
+    pub struct Query: u32 {
+        const Code = 0x1;
+        const Position = 0x2;
+        const Alias = 0x4;
+        const Type = 0x8;
+        const Level = 0x10;
+        const Rank = 0x20;
+        const Attribute = 0x40;
+        const Race = 0x80;
+        const Attack = 0x100;
+        const Defense = 0x200;
+        const BaseAttack = 0x400;
+        const BaseDefense = 0x800;
+        const Reason = 0x1000;
+        const ReasonCard = 0x2000;
+        const EquipCard = 0x4000;
+        const TargetCard = 0x8000;
+        const OverlayCard = 0x10000;
+        const Counters = 0x20000;
+        const Owner = 0x40000;
+        const Status = 0x80000;
+        const Lscale = 0x200000;
+        const Rscale = 0x400000;
+        const Link = 0x800000;
+    }
+}
+
+bitflags! {
+    #[derive(Serialize, Deserialize)]
+    pub struct Attribute: u32 {
+        const Earth = 1;
+        const Water = 2;
+        const Fire = 4;
+        const Wind = 8;
+        const Light = 16;
+        const Dark = 32;
+        const Devine = 64;
+    }
+}
+
+
+bitflags! {
+    #[derive(Serialize, Deserialize)]
+    pub struct Linkmarkers: u32 {
+        const BottomLeft = 1;
+        const Bottom = 2;
+        const BottomRight = 4;
+        const Left = 8;
+        const Right = 32;
+        const TopLeft = 64;
+        const Top = 128;
+        const TopRight = 256;
+    }
 }
 
 #[derive(Serialize_repr, Deserialize_repr, Copy, Clone, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
@@ -463,4 +531,22 @@ pub enum Phase {
     Battle = 128,
     Main2 = 256,
     End = 512,
+}
+
+
+bitflags! {
+    #[derive(Serialize, Deserialize)]
+    pub struct SummonType: u32 {
+        const Normal = 0x10000000;
+        const Advance = 0x11000000;
+        const Dual = 0x12000000;
+        const Flip = 0x20000000;
+        const Special = 0x40000000;
+        const Fusion = 0x43000000;
+        const Ritual = 0x45000000;
+        const Synchro = 0x46000000;
+        const Xyz = 0x49000000;
+        const Pendulum = 0x4a000000;
+        const Link = 0x4c000000;
+    }
 }

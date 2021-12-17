@@ -10,7 +10,7 @@ use crate::ygopro::message::stoc;
 use crate::ygopro::message::srvpru;
 use crate::ygopro::message::gm;
 
-pub fn init()  -> anyhow::Result<()> {
+pub fn init() -> anyhow::Result<()> {
     register_handlers();
     Ok(())
 }
@@ -34,11 +34,11 @@ pub enum DuelStage {
 
 fn register_handlers() {
     srvpru_handler!(srvpru::RoomCreated,           get_room_attachment_sure, |context, _| Ok(false)).register_as("stage_recorder_1");
-    srvpru_handler!(stoc::MessageType::DuelStart,  get_room_attachment_sure, |context| { attachment.duel_stage = DuelStage::Finger;  }).register_as("stage_recorder_2");
-    srvpru_handler!(stoc::MessageType::SelectHand, get_room_attachment_sure, |context| { attachment.duel_stage = DuelStage::Finger;  }).register_as("stage_recorder_3");
-    srvpru_handler!(stoc::MessageType::SelectTp,   get_room_attachment_sure, |context| { attachment.duel_stage = DuelStage::Firstgo; }).register_as("stage_recorder_4");
-    srvpru_handler!(stoc::MessageType::ChangeSide, get_room_attachment_sure, |context| { attachment.duel_stage = DuelStage::Siding;  }).register_as("stage_recorder_5");
-    srvpru_handler!(gm::MessageType::Start,        get_room_attachment_sure, |context| { attachment.duel_stage = DuelStage::Dueling; }).register_as("stage_recorder_6");
+    srvpru_handler!(stoc::MessageType::DuelStart,  get_room_attachment_sure, |context| { attachment?.duel_stage = DuelStage::Finger;  }).register_as("stage_recorder_2");
+    srvpru_handler!(stoc::MessageType::SelectHand, get_room_attachment_sure, |context| { attachment?.duel_stage = DuelStage::Finger;  }).register_as("stage_recorder_3");
+    srvpru_handler!(stoc::MessageType::SelectTp,   get_room_attachment_sure, |context| { attachment?.duel_stage = DuelStage::Firstgo; }).register_as("stage_recorder_4");
+    srvpru_handler!(stoc::MessageType::ChangeSide, get_room_attachment_sure, |context| { attachment?.duel_stage = DuelStage::Siding;  }).register_as("stage_recorder_5");
+    srvpru_handler!(gm::MessageType::Start,        get_room_attachment_sure, |context| { attachment?.duel_stage = DuelStage::Dueling; }).register_as("stage_recorder_6");
     
     register_room_attachement_dropper();
     Handler::register_handlers("stage_recorder", Direction::SRVPRU, vec!["stage_recorder_1"]);

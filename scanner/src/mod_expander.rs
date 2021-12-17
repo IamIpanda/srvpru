@@ -1,20 +1,19 @@
 use std::path::Path;
 use std::fs;
+use proc_macro::TokenStream;
+use proc_macro2::Span;
 
-struct ExpandModInput {
-    path: LitStr
-}
+use syn::Token;
+use syn::parse_macro_input;
+use syn::parse::Parse;
+use syn::parse::ParseStream;
+use syn::LitStr;
+use quote::quote;
 
 struct InitPluginsInput {
     path: LitStr,
     _comma: Token![,],
     execution: proc_macro2::TokenStream,
-}
-
-impl Parse for ExpandModInput {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        Ok(ExpandModInput { path: input.parse()? })
-    }
 }
 
 impl Parse for InitPluginsInput {
@@ -27,27 +26,7 @@ impl Parse for InitPluginsInput {
     }
 } 
 
-#[proc_macro]
-pub fn expand_mod(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as ExpandModInput);
-    let path = input.path.value();
-    let dir = match std::env::var_os("CARGO_MANIFEST_DIR") {
-        Some(manifest_dir) => std::path::PathBuf::from(manifest_dir).join(path),
-        None => std::path::PathBuf::from(path),
-    };
-
-    let expanded = match scan_directory(dir) {
-        Ok(names) => names.into_iter().map(|name| {
-            let ident = Ident::new(&name.replace('-', "_"), Span::call_site());
-            quote!( pub mod #ident; )
-        }).collect(),
-        Err(err) => syn::Error::new(Span::call_site(), err).to_compile_error(),
-    };
-    TokenStream::from(expanded)
-}
-
-#[proc_macro]
-pub fn init_plugin_under_dir(input: TokenStream) -> TokenStream {
+pub fn execute_for_each_under_dir(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as InitPluginsInput);
     let path = input.path.value();
     let execution = input.execution.to_string();
@@ -61,8 +40,11 @@ pub fn init_plugin_under_dir(input: TokenStream) -> TokenStream {
 
     let expanded = match scan_directory(dir) {
         Ok(names) => names.into_iter().map(|name| {
-            let name = logical_path.clone() + &name;
-            let actual_execution = execution.replace("# name", &name).replace("#name", &name);
+            let fullname = logical_path.clone() + &name;
+            let actual_execution = execution.replace("# name", &name)
+                                                   .replace("#name", &name)
+                                                   .replace("# fullname", &fullname)
+                                                   .replace("#fullname", &fullname);
             let actual_execution_stream: TokenStream = actual_execution.parse().unwrap();
             let actual_execution_stream: proc_macro2::TokenStream = actual_execution_stream.into();
             quote!( #actual_execution_stream; )

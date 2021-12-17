@@ -1,16 +1,12 @@
+use proc_macro2::Span;
 use syn::DeriveInput;
+use proc_macro::TokenStream;
 
-#[proc_macro_attribute]
-pub fn ctos(_: TokenStream, input: TokenStream) -> TokenStream { return input; }
-#[proc_macro_attribute]
-pub fn stoc(_: TokenStream, input: TokenStream) -> TokenStream { return input; }
-#[proc_macro_attribute]
-pub fn gm(_: TokenStream, input: TokenStream) -> TokenStream { return input; }
-#[proc_macro_attribute]
-pub fn srvpru(_: TokenStream, input: TokenStream) -> TokenStream { return input; }
+use syn::parse_macro_input;
+use syn::parse::Parse;
+use syn::parse::ParseStream;
+use quote::quote;
 
-
-#[proc_macro_derive(Struct)]
 pub fn ygopro_struct(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let struct_ident = input.ident;
@@ -84,7 +80,6 @@ fn expr_to_string(path: syn::ExprPath) -> String {
     quote!(#path).to_string().replace(" ", "")
 }
 
-#[proc_macro]
 pub fn srvpru_handler(input: TokenStream) -> TokenStream {
     let mut input = parse_macro_input!(input as RegisterHandlerInput);
     let mut attachment: Option<syn::ExprPath> = None;
@@ -132,16 +127,6 @@ pub fn srvpru_handler(input: TokenStream) -> TokenStream {
     };
     TokenStream::from(expand)
 }
-
-
-#[proc_macro]
-pub fn srvpru_handler_debug(input: TokenStream) -> TokenStream {
-    let result = srvpru_handler(input);
-    let stream = proc_macro2::TokenStream::from(result);
-    println!("{}", stream.to_string());
-    return TokenStream::from(stream);
-}
-
 
 fn can_add_return_in_last(block: &Box<syn::Expr>) -> bool {
     let block = *block.clone();

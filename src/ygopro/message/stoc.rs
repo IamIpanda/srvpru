@@ -1,3 +1,9 @@
+// ============================================================
+//  stoc
+// ------------------------------------------------------------
+/// Message types sent from server to client.
+// ============================================================
+
 use serde::Serialize;
 use serde::Deserialize;
 use num_enum::TryFromPrimitive;
@@ -7,7 +13,7 @@ use crate::ygopro::Netplayer;
 use crate::ygopro::message::HostInfo;
 use crate::ygopro::message::GreedyVector;
 
-#[derive(Copy, Clone, TryFromPrimitive, IntoPrimitive, Eq, PartialEq, Debug, Hash)]
+#[derive(Copy, Clone, TryFromPrimitive, IntoPrimitive, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
 #[repr(u8)]
 pub enum MessageType {
     GameMessage = 1,
@@ -37,22 +43,18 @@ pub enum MessageType {
 pub type GameMessage = super::game_message::GameMessage;
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[stoc]
 pub struct ErrorMessage {
     pub msg: crate::ygopro::ErrorMessage,
     pub align: [u8; 3],
     pub code: u32
 }
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[stoc]
 pub struct SelectHand;
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[stoc]
 pub struct SelectTp;
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[stoc]
 pub struct HandResult {
     pub res1: u8,
     pub res2: u8
@@ -64,60 +66,50 @@ pub struct TpResult {
 }
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[stoc]
 pub struct ChangeSide;
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
 pub struct WaitingSide;
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[stoc]
 pub struct CreateGame {
     pub gameid: u32
 }
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[stoc]
 pub struct JoinGame {
     pub info: HostInfo
 }
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[stoc]
 pub struct TypeChange {
     pub _type: u8
 }
  
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[stoc]
 pub struct LeaveGame {
     pub pos: Netplayer
 }
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[stoc]
 pub struct DuelStart;
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[stoc]
 pub struct DuelEnd;
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[stoc]
 pub struct Replay {
     #[serde(with = "GreedyVector::<65536>")]
     pub data: Vec<u8>
 }
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[stoc]
 pub struct TimeLimit {
     pub player: Netplayer,
     pub left_time: u16
 }
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[stoc]
 pub struct Chat {
     pub name: u16,
     #[serde(with = "GreedyVector::<255>")]
@@ -125,20 +117,17 @@ pub struct Chat {
 }
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[stoc]
 pub struct HsPlayerEnter {
     pub name: [u16; 20],
     pub pos: Netplayer 
 }
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[stoc]
 pub struct HsPlayerChange {
-    pub status: u8 
+    pub status: crate::ygopro::PlayerChange 
 }
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[stoc]
 pub struct HsWatchChange {
     pub match_count: u16
 }
@@ -147,7 +136,6 @@ pub struct HsWatchChange {
 pub struct FieldFinish;
 
 #[derive(Serialize, Deserialize, Debug, Struct)]
-// #[stoc]
 pub struct DeckCount {
     pub mainc_s: u16,
     pub sidec_s: u16,

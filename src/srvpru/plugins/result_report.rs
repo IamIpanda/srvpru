@@ -4,8 +4,8 @@
 //! After a match finish, send a report to target endpoint.
 //! 
 //! Dependency:
-//! - [position_recorder](super::position_recorder)
-//! - [deck_recorder](super::deck_recorder)
+//! - [position_recorder](super::recorder::position_recorder)
+//! - [deck_recorder](super::recorder::deck_recorder)
 // ============================================================
 
 use std::vec;
@@ -94,7 +94,7 @@ static REQWEST_CLIENT: once_cell::sync::OnceCell<reqwest::Client> = once_cell::s
 pub fn register_handlers() {
     Handler::before_message::<RoomDestroy, _>(95, "match_result_sender", |context, _| Box::pin(async move {
         let configuration = get_configuration();
-        let attachment = get_room_attachment_sure(context);
+        let attachment = get_room_attachment_sure(context)?;
         let players = context.get_room().ok_or(anyhow!("Cannot get room"))?.lock().get_players_in_hashmap();
         let player_a = unwrap_or_return!(players.get(&Netplayer::Player1));
         let player_b = unwrap_or_return!(players.get(&Netplayer::Player2));
@@ -130,9 +130,9 @@ pub fn register_handlers() {
         Ok(false)
     })).register();
 
-    Handler::before_message::<Win, _>(100, "match_result_countor", |context, request| Box::pin(async move {
-        let mut attachment = get_room_attachment_sure(context);
-        match request.winner {
+    Handler::before_message::<Win, _>(100, "match_result_countor", |context, message| Box::pin(async move {
+        let mut attachment = get_room_attachment_sure(context)?;
+        match message.winner {
             Netplayer::Player1 => attachment.player_a_result.score.step(),
             Netplayer::Player2 => attachment.player_b_result.score.step(),
             _ => {}
@@ -140,14 +140,14 @@ pub fn register_handlers() {
         Ok(false)
     })).register();
 
-    Handler::before_message::<Start, _>(100, "match_result_first_recorder", |context, request| Box::pin(async move {
-        if request._type & 0xf > 0 {
-            let mut attachment = get_room_attachment_sure(context);
+    Handler::before_message::<Start, _>(100, "match_result_first_recorder", |context, message| Box::pin(async move {
+        if message._type & 0xf > 0 {
+            let mut attachment = get_room_attachment_sure(context)?;
             attachment.first.push(context.get_player().ok_or(anyhow!("Cannot get player"))?.lock().name.clone());
         }
         Ok(false)
     })).register();
-    
+
     register_room_attachement_dropper();
     Handler::register_handlers("result_report", Direction::SRVPRU, vec!["match_result_sender", "match_result_player_drop_listener"]);
     Handler::register_handlers("result_report", Direction::STOC, vec!["match_result_countor", "match_result_first_recorder"]);

@@ -21,13 +21,12 @@ pub fn init() -> anyhow::Result<()> {
 }
 
 fn register_handlers() {
-    Handler::follow_message::<ctos::UpdateDeck, _>(100, "deck_recorder", |context, request| Box::pin(async move {
-        if contains_player_attachment(context.addr) {
-            let deck = Deck::from_data(request);
-            insert_player_attachment(context, deck, Vec::new());
+    Handler::follow_message::<ctos::UpdateDeck, _>(100, "deck_recorder", |context, message| Box::pin(async move {
+        if contains_player_attachment(&context.addr) {
+            insert_player_attachment(context, message.deck.clone(), Vec::new());
         }
         let mut attachment = get_player_attachment_sure(context);
-        attachment.history_decks.push(Deck::from_data(request));
+        attachment.history_decks.push(message.deck.clone());
         Ok(false)
     })).register();
     register_player_attachment_dropper();

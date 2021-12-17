@@ -3,8 +3,8 @@
 // ------------------------------------------------------------
 //! Allow dropped user reconnect to game.
 //! 
-//! Need enable:
-//! - [stage_recorder](super::stage_recorder)
+//! Dependency:
+//! - [stage_recorder](super::recorder::stage_recorder)
 //! 
 //! **ATTENTION**  
 //! Reconnect plugin must record the last stoc game message 
@@ -18,6 +18,7 @@ use tokio::io::AsyncWriteExt;
 use parking_lot::Mutex;
 use anyhow::Result;
 
+use crate::srvpru::CommonError;
 use crate::ygopro::message;
 use crate::ygopro::message::Direction;
 use crate::ygopro::message::MessageType;
@@ -32,12 +33,12 @@ use crate::srvpru::Context;
 use crate::srvpru::Handler;
 use crate::srvpru::Room;
 use crate::srvpru::Player;
-use crate::srvpru::plugins::stage_recorder;
-use crate::srvpru::plugins::stage_recorder::DuelStage;
+use crate::srvpru::plugins::recorder::stage_recorder;
+use crate::srvpru::plugins::recorder::stage_recorder::DuelStage;
 use crate::srvpru::generate_chat;
 use crate::ygopro::message::stoc::FieldFinish;
 
-fn default_timeout() -> u64 { 90 }
+fn default_timeout() -> u64 { 10 }
 
 set_configuration! {
     #[serde(default = "default_timeout")]
@@ -85,11 +86,16 @@ impl std::default::Default for ReconnectStatus {
 
 fn register_handlers() {
     // Stop player termination.
-    Handler::before_message::<srvpru::PlayerDestroy, _>(0, "reconnect_player_destroy_interceptor", |context, request| Box::pin(async move {
-        let player = request.player.clone();
+    Handler::before_message::<srvpru::PlayerDestroy, _>(0, "reconnect_player_destroy_interceptor", |context, message| Box::pin(async move {
+        let player = message.player.clone();
         let mut player_attachment = get_player_attachment_sure(context);
         // This user is already in a countdown (means timeout)
-        if player_attachment.countdown.is_some() { return Ok(false); }
+        if player_attachment.countdown.is_some() {
+            // TODO: Do something to make attachment don't leak here
+            return Ok(false); 
+        }
+        // This user client writer already taken (means expeled)
+        if player.lock().client_stream_writer.is_none() { return Ok(false); } 
         // Duel is in prepare or already finished
         let duel_stage = context.get_duel_stage();
         if duel_stage == DuelStage::Begin || duel_stage == DuelStage::End { return Ok(false); }
@@ -100,22 +106,23 @@ fn register_handlers() {
             // The second user drops.
             {
                 // Make now dropping player drop, that player fail the game.
-                request.player.lock().server_stream_writer.take();
+                message.player.lock().server_stream_writer.take();
             }
             let addr = dropped_player.lock().client_addr;
-            crate::srvpru::trigger_internal_async(addr, srvpru::PlayerDestroy { player: dropped_player });
+            crate::srvpru::trigger_internal(addr, srvpru::PlayerDestroy { player: dropped_player }).await.ok();
             return Ok(false); 
         }
         // Move player to waiting status
-        room_attachment.dropped_player = Some(request.player.clone()); 
+        room_attachment.dropped_player = Some(message.player.clone()); 
         player_attachment.reconnecting = ReconnectStatus::Dropped; 
         // Count down on timeout
         let countdown_player = player.clone();
-        let addr = *context.addr;
+        let countdown_addr = context.addr;
         player_attachment.countdown = Some(tokio::spawn(async move {
             let configuration = get_configuration();
-            tokio::time::sleep(tokio::time::Duration::from_millis(configuration.timeout)).await;
-            crate::srvpru::trigger_internal_async(addr, srvpru::PlayerDestroy { player: countdown_player });
+            tokio::time::sleep(tokio::time::Duration::from_secs(configuration.timeout)).await;
+            { countdown_player.lock().server_stream_writer.take(); }
+            crate::srvpru::trigger_internal(countdown_addr, srvpru::PlayerDestroy { player: countdown_player }).await.ok();
         }));
         // Send hint
         let (name, region) = {
@@ -126,7 +133,7 @@ fn register_handlers() {
         return context.block_message();
     })).register();
 
-    Handler::before_message::<ctos::JoinGame, _>(7, "reconnect_joingame_interceptor", |context, request| Box::pin(async move {
+    Handler::before_message::<ctos::JoinGame, _>(7, "reconnect_joingame_interceptor", |context, message| Box::pin(async move {
         // When dropper rejoin the game, there will be two players:
         // The former player contains in room.dropped_player (a)
         // The new player join with a new addr, which is still a player precursor (b)
@@ -135,15 +142,31 @@ fn register_handlers() {
         // player (b) will not own any attachment on reconenct plugin.
         let configuration = get_configuration();
         // Search room by name, as room is not built now.
-        let room_name = context.get_string(&request.pass, "pass")?;
+        let room_name = context.get_string(&message.pass, "pass")?;
         let room = crate::unwrap_or_return!(Room::get_room(&room_name));
         // check if can reconnect
-        let mut room_attachment = crate::unwrap_or_return!(get_attachment_by_name(context, request));
-        let dropped_player = crate::unwrap_or_return!(room_attachment.dropped_player.as_mut());
-        if ! ip_equal(dropped_player.lock().client_addr, *context.addr) {
-            if configuration.can_reconnect_by_kick { return Ok(false) }
-            else { return Ok(false) }
+        let mut room_attachment = crate::unwrap_or_return!(get_attachment_by_name(context, message));
+        let dropped_player = if configuration.can_reconnect_by_kick {
+            crate::unwrap_or_return!(room_attachment.dropped_player.as_mut().map(|player| player.clone()))
         }
+        else {
+            // Scan to get which player.
+            let _room = room.lock();
+            let player = context.get_player().ok_or(CommonError::PlayerNotExist)?;
+            // Only accept player which has origin_name (means have password)
+            let mut _player = player.lock();
+            if _player.origin_name.is_none() { return Ok(false) }
+            unwrap_or_return!(_room.players.iter().find(|origin_player| {
+                let _origin_player = origin_player.lock();
+                if _player.name == _origin_player.name {
+                    // Drop that player
+                    _player.server_stream_writer.take();
+                    return true;
+                }
+                return false;
+            })).clone()
+        };
+        if ! ip_equal(dropped_player.lock().client_addr, context.addr) { return Ok(false); }
         // Lock actual room and player to send resposne
         {
             let mut _room = room.lock();
@@ -164,32 +187,32 @@ fn register_handlers() {
         // Now room contains player(a) and player(b) at the same time.
         // Don't need to send precursor loaded messages, so discard it here.
         {
-            let (mut player, _) = crate::srvpru::PlayerPrecursor::upgrade(*context.addr, room.clone()).ok_or(anyhow!("Cannot find precursor"))?;
+            let (mut player, _) = crate::srvpru::PlayerPrecursor::upgrade(context.addr, room.clone()).ok_or(anyhow!("Cannot find precursor"))?;
             player.client_stream_writer = context.socket.take();
             let player = Arc::new(Mutex::new(player));
-            crate::srvpru::player::PLAYERS.write().insert(*context.addr, player.clone());
-            crate::srvpru::room::ROOMS_BY_CLIENT_ADDR.write().insert(*context.addr, room.clone());
+            crate::srvpru::player::PLAYERS.write().insert(context.addr, player.clone());
+            crate::srvpru::room::ROOMS_BY_CLIENT_ADDR.write().insert(context.addr, room.clone());
             room.lock().players.push(player);
         }
         return context.block_message();
     })).register();
 
     srvpru_handler!(ctos::MessageType::UpdateDeck, get_room_attachment_sure, |context| {
-        if let Some(player) = attachment.dropped_player.as_mut() {
+        if let Some(player) = attachment?.dropped_player.as_mut() {
             let addr = player.lock().client_addr;
             let mut attachment = PLAYER_ATTACHMENTS.write().remove(&addr).ok_or(anyhow!("Can't get room attachment."))?;
-            let new_player = context.get_player().ok_or(anyhow!("Can't get player"))?;
+            let new_player = context.get_player().ok_or(CommonError::PlayerNotExist)?.clone();
             if attachment.reconnecting == ReconnectStatus::Prepare {
-                if attachment.used_deck == context.request_buffer {
+                if attachment.used_deck == context.message_buffer {
                     // Pair success. start reconnect.
                     context.send_back(&generate_chat("{reconnecting_to_room}", Colors::Babyblue, context.get_region())).await?;
                     // Stop count down.
                     if let Some(handle) = &attachment.countdown { handle.abort(); attachment.countdown = None; }
                     // Move player.
-                    crate::srvpru::server::trigger_internal(*context.addr, srvpru::PlayerMove { post_player: player.clone(), new_player }).await;
+                    crate::srvpru::server::trigger_internal(context.addr, srvpru::PlayerMove { post_player: player.clone(), new_player: new_player.clone() }).await?;
                     // Here cannot release player attachements locker, so have to move the attachment iself                
                     attachment.reconnecting = ReconnectStatus::Recovering;
-                    PLAYER_ATTACHMENTS.write().insert(*context.addr, attachment);
+                    PLAYER_ATTACHMENTS.write().insert(context.addr, attachment);
                     // Feed data.
                     reconnect(context).await?;
                     return context.block_message();
@@ -203,13 +226,13 @@ fn register_handlers() {
         }
         else {
             let mut player_attachement = get_player_attachment_sure(context);
-            player_attachement.used_deck = context.request_buffer.to_vec();
+            player_attachement.used_deck = context.message_buffer.to_vec();
         };
     }).register_as("reconnect_deck_recorder");
 
-    Handler::follow_message(100, "reconnect_cleanup", |context, _: &FieldFinish| Box::pin(async move {
+    Handler::follow_message::<FieldFinish, _>(100, "reconnect_cleanup", |context, _| Box::pin(async move {
         let mut attachment = get_player_attachment_sure(context);
-        let mut room_attachment = get_room_attachment_sure(context);
+        let mut room_attachment = get_room_attachment_sure(context)?;
         room_attachment.dropped_player = None;
         attachment.reconnecting = ReconnectStatus::Normal;
         if let Some(last_hint) = attachment.last_hint_message.as_ref() {
@@ -223,8 +246,8 @@ fn register_handlers() {
         Ok(false)
     })).register();
 
-    srvpru_handler!(srvpru::PlayerDestroy, |_, request| {
-        if let Some(_player_attachment) = drop_player_attachment(request) {
+    srvpru_handler!(srvpru::PlayerDestroy, |_, message| {
+        if let Some(_player_attachment) = drop_player_attachment(message) {
             if let Some(handle) = _player_attachment.countdown {
                 handle.abort();
             }
@@ -238,29 +261,41 @@ fn register_handlers() {
         };
     }).register_as("reconnect_ready_stopper");
 
-    srvpru_handler!(stoc::GameMessage, get_player_attachment, |context, request| {
+    srvpru_handler!(stoc::GameMessage, get_player_attachment, |context, message| {
         if let Some(mut attachment) = attachment {
-            if attachment.reconnecting == ReconnectStatus::Normal && request.kind != gm::MessageType::Retry {
-                attachment.last_game_message = Some(context.request_buffer.to_vec());
+            if attachment.reconnecting == ReconnectStatus::Normal && message.kind != gm::MessageType::Retry {
+                attachment.last_game_message = Some(context.message_buffer.to_vec());
             }
         };
     }).register_as("reconnect_gm_recorder");
 
-    srvpru_handler!(gm::Hint, get_player_attachment_sure, |context, request| {
-        if request._type == crate::ygopro::Hint::SelectMessage {
-            attachment.last_hint_message = Some(request.clone());
+    /*
+    srvpru_handler!(gm::Hint, get_player_attachment_sure, |context, message| {
+        if message._type == crate::ygopro::Hint::SelectMessage {
+            attachment.last_hint_message = Some(message.clone());
         };
     }).register_as("reconnect_hint_recorder");
+    */
+
+    crate::srvpru::plugins::base::chat_command::before_message("refresh", |context, _| Box::pin(async move {
+        let mut success = false;
+        let attachment = get_player_attachment_sure(context);
+        if let (Some(message), Some(socket)) = (attachment.last_game_message.as_ref(), context.socket.as_mut()) {
+            success = socket.write_all(&message).await.is_ok();
+        }
+        if success { context.send_back(&generate_chat("{refresh_success}", Colors::Babyblue, context.get_region())).await.ok(); }
+        else       { context.send_back(&generate_chat("{refresh_fail}",    Colors::Red,      context.get_region())).await.ok(); }
+    })).register_for_plugin("reconnect");
 
     register_room_attachement_dropper();
     Handler::register_handlers("reconnect", Direction::SRVPRU, vec!("reconnect_player_destroy_interceptor", "reconnect_player_attachment_dropper"));
-    Handler::register_handlers("reconnect", Direction::CTOS, vec!("reconnect_deck_recorder", "reconnect_joingame_interceptor", "reconnect_ready_stopper", "reconnect_hint_recorder"));
+    Handler::register_handlers("reconnect", Direction::CTOS, vec!("reconnect_deck_recorder", "reconnect_joingame_interceptor", "reconnect_ready_stopper"));
     Handler::register_handlers("reconnect", Direction::STOC, vec!("reconnect_cleanup", "reconnect_gm_recorder"));
 }
 
 async fn reconnect<'a, 'b>(context: &'b mut Context<'a>) -> Result<()> {
-    let duel_stage = &stage_recorder::get_room_attachment_sure(context).duel_stage;
-    let player = context.get_player().ok_or(anyhow!("Cannot get player"))?;
+    let duel_stage = &stage_recorder::get_room_attachment_sure(context)?.duel_stage;
+    let player = context.get_player().clone().ok_or(CommonError::PlayerNotExist)?;
     let mut _player = player.lock();
     let message = match duel_stage {
         DuelStage::Dueling => {
@@ -273,7 +308,7 @@ async fn reconnect<'a, 'b>(context: &'b mut Context<'a>) -> Result<()> {
         _ => { warn!("try to reconnect in wrong status."); return Ok(()); }
     };
     _player.send_to_client(&stoc::DuelStart{}).await?;
-    let socket = _player.client_stream_writer.as_mut().ok_or(anyhow!("Socket already taken."))?;
+    let socket = _player.client_stream_writer.as_mut().ok_or(CommonError::SocketTaken)?;
     crate::srvpru::send_raw_data(socket, MessageType::STOC(message), &[]).await?;
     Ok(())
 }

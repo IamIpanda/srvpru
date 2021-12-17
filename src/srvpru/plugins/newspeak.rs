@@ -8,9 +8,7 @@ use std::net::IpAddr;
 use std::sync::Arc;
 use parking_lot::Mutex;
 
-use crate::srvpru::ProcessorError;
 use crate::ygopro::Colors;
-use crate::ygopro::message::Struct;
 use crate::ygopro::message::Direction;
 use crate::ygopro::message::ctos::Chat;
 use crate::ygopro::message::ctos::JoinGame;
@@ -22,7 +20,6 @@ use crate::srvpru::Room;
 use crate::srvpru::Player;
 use crate::srvpru::generate_chat;
 use crate::ygopro::message::ctos::PlayerInfo;
-use crate::ygopro::message::stoc::ErrorMessage;
 use crate::ygopro::message::string::cast_to_fix_length_array;
 
 set_configuration! {
@@ -35,7 +32,7 @@ set_configuration! {
 }
 
 /// Decide what to do on bad words.
-#[derive(serde::Deserialize, Debug, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq)]
 pub enum BadwordBehavior {
     /// Block that message, and send a warning.
     Block,
@@ -54,17 +51,17 @@ pub fn init() -> anyhow::Result<()>  {
 }
 
 fn register_handlers() {
-    Handler::before_message::<Chat, _>(101, "newspeak_chat", |context, request| Box::pin(async move {
+    Handler::before_message::<Chat, _>(101, "newspeak_chat", |context, message| Box::pin(async move {
         let configuration = get_configuration();
-        let mut message = context.get_string(&request.msg, "message")?.clone();
-        let level = judge_bad_word_level(&mut message);
+        let mut chat_message = context.get_string(&message.msg, "message")?.clone();
+        let level = judge_bad_word_level(&mut chat_message);
         if level >= 0 {
-            let player = context.get_player();
-            let room = context.get_room();
-            if let (Some(player), Some(room)) = (player, room) {
-                let message = message.clone();
+            if let (Some(player), Some(room)) = (context.get_player(), context.get_room()) {
+                let chat_message = chat_message.clone();
+                let player = player.clone();
+                let room = room.clone();
                 tokio::spawn(async move { 
-                    if let Err(e) = report_to_big_brother(room, player, level as u8, message).await {
+                    if let Err(e) = report_to_big_brother(room, player, level as u8, chat_message).await {
                         warn!("Report to big brother failed: {:}", e);
                     }
                 });
@@ -77,21 +74,23 @@ fn register_handlers() {
             match configuration.behavior[level as usize] {
                 BadwordBehavior::Block => {
                     send_warning_mesage(context, level).await.ok();
-                    return Ok(true) 
+                    return context.block_message();
                 },
-                BadwordBehavior::Replace => {        
-                    let response = Chat { msg: crate::ygopro::message::string::cast_to_c_array(&message) };
-                    context.response = Some(Box::new(response) as Box<dyn Struct>);
+                BadwordBehavior::Replace => {
+                    message.msg = crate::ygopro::message::string::cast_to_c_array(&chat_message);
+                    context.reserialize = true;
                     send_warning_mesage(context, level).await.ok();
                 },
-                BadwordBehavior::Silent => {
-                    let player = context.get_player().ok_or(anyhow!("Cannot find current player"))?;
-                    let mut _player = player.lock();
-                    if let Some(socket) = _player.client_stream_writer.as_mut() {
-                        let pos: u8 = context.get_position().into();
-                        crate::srvpru::send(socket, &crate::ygopro::message::stoc::Chat { name: pos as u16, msg: request.msg.clone() }).await.ok();
+                BadwordBehavior::Silent => { 
+                    {
+                        let player = context.get_player().ok_or(anyhow!("Cannot find current player"))?;
+                        let mut _player = player.lock();
+                        if let Some(socket) = _player.client_stream_writer.as_mut() {
+                            let pos: u8 = context.get_position().into();
+                            crate::srvpru::send(socket, &crate::ygopro::message::stoc::Chat { name: pos as u16, msg: message.msg.clone() }).await.ok();
+                        }
                     }
-                    return Ok(true);
+                    return context.block_message();
                 },
                 BadwordBehavior::None => {},
             }
@@ -99,20 +98,18 @@ fn register_handlers() {
         Ok(false)
     })).register();
 
-    Handler::before_message::<PlayerInfo, _>(1, "newspeak_player_name", |context, request| Box::pin(async move {
-        let name = context.get_string(&request.name, "name")?;
+    Handler::before_message::<PlayerInfo, _>(1, "newspeak_player_name", |context, message| Box::pin(async move {
+        let name = context.get_string(&message.name, "name")?;
         let level = judge_bad_word_level(name);
         let configuration = get_configuration();
         if level >= 0 {
             match configuration.behavior[level as usize] {
-                BadwordBehavior::Block => {
-                    context.send(&struct_sequence![
-                        generate_chat(&format!("{{bad_name_level{:}}}", level), Colors::Red, context.get_region()),
-                        ErrorMessage{ msg: crate::ygopro::ErrorMessage::Joinerror, align: [0; 3], code: 2 }
-                    ]).await.ok();
-                    Err(ProcessorError::Abort)?;
+                BadwordBehavior::Block => 
+                    return context.refuse_join_game(Some(&format!("{{bad_name_level{:}}}", level))).await,
+                BadwordBehavior::Replace => {
+                    message.name = cast_to_fix_length_array(name);
+                    context.reserialize = true; 
                 },
-                BadwordBehavior::Replace => context.response = Some(Box::new(PlayerInfo { name: cast_to_fix_length_array(name) })),
                 BadwordBehavior::Silent => *name = "******".to_string(), // Block on STOC
                 BadwordBehavior::None => {}, 
             }
@@ -120,25 +117,18 @@ fn register_handlers() {
         Ok(false)
     })).register();
 
-    Handler::before_message::<JoinGame, _>(5, "newspeak_roomname", |context, request| Box::pin(async move {
-        let name = context.get_string(&request.pass, "pass")?;
+    Handler::before_message::<JoinGame, _>(5, "newspeak_roomname", |context, message| Box::pin(async move {
+        let name = context.get_string(&message.pass, "pass")?;
         let level = judge_bad_word_level(name);
         let configuration = get_configuration();
         if level > 0 {
             match configuration.behavior[level as usize] {
-                BadwordBehavior::Block => {
-                    context.send(&struct_sequence![
-                        generate_chat(&format!("{{bad_roomname_level{:}}}", level), Colors::Red, context.get_region()),
-                        ErrorMessage{ msg: crate::ygopro::ErrorMessage::Joinerror, align: [0; 3], code: 2 }
-                    ]).await.ok();
-                    Err(ProcessorError::Abort)?;
-                },
-                BadwordBehavior::Replace => context.response = Some(Box::new(JoinGame { 
-                    version: request.version, 
-                    align: 0, 
-                    gameid: request.gameid,
-                    pass: cast_to_fix_length_array(name)
-                })),
+                BadwordBehavior::Block => 
+                    return context.refuse_join_game(Some(&format!("{{bad_room_level{:}}}", level))).await,
+                BadwordBehavior::Replace => {
+                    message.pass = cast_to_fix_length_array(name);
+                    context.reserialize = true;
+                }
                 BadwordBehavior::Silent => *name = "illegal_room_name_".to_string() + &chrono::offset::Local::now().timestamp_millis().to_string(),
                 BadwordBehavior::None => {},
             }
@@ -146,18 +136,22 @@ fn register_handlers() {
         Ok(false)
     })).register();
 
-    Handler::before_message(1, "newspeak_stoc_player_name", |context, request: &HsPlayerEnter| Box::pin(async move {
-        let name = context.get_string(&request.name, "name")?;
+    Handler::before_message::<HsPlayerEnter, _>(1, "newspeak_stoc_player_name", |context, message| Box::pin(async move {
+        let name = context.get_string(&message.name, "name")?;
         let level = judge_bad_word_level(name);
         let configuration = get_configuration();
         if level >= 0 {
             match configuration.behavior[level as usize] {
                 BadwordBehavior::Block => {/* should be blocked by ctos */} 
-                BadwordBehavior::Replace => context.response = Some(Box::new(HsPlayerEnter { name: cast_to_fix_length_array(name), pos: request.pos })),
+                BadwordBehavior::Replace => {
+                    message.name = cast_to_fix_length_array(name);
+                    context.reserialize = true;
+                },
                 BadwordBehavior::Silent => {
                     *name = "******".to_string();
-                    if request.pos != context.get_position() {
-                        context.response = Some(Box::new(HsPlayerEnter { name: cast_to_fix_length_array("******"), pos: request.pos }))
+                    if message.pos != context.get_position() {
+                        message.name = cast_to_fix_length_array("******");
+                        context.reserialize = true;
                     }
                 },
                 BadwordBehavior::None => {},
@@ -188,7 +182,7 @@ fn judge_bad_word_level(target: &mut String) -> i8 {
 }
 
 async fn send_warning_mesage<'a>(context: &Context<'a>, level: i8) -> anyhow::Result<()> {
-    let player = context.get_player().ok_or(anyhow!("Can't find current player"))?;
+    let player = context.get_player().clone().ok_or(anyhow!("Can't find current player"))?;
     let mut _player = player.lock();
     _player.send_to_client(&generate_chat(&format!("{{chat_warn_level{}}}", level), Colors::Red, context.get_region())).await?;
     Ok(())

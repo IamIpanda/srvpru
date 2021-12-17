@@ -4,10 +4,11 @@
 //! Record each player lp.
 //! 
 //! Dependency:
-//! - [position_recorder](super::position_recorder)
+//! - [position_recorder](super::recorder::position_recorder)
 // ============================================================
 
 use crate::srvpru;
+use crate::srvpru::CommonError;
 use crate::srvpru::Handler;
 use crate::srvpru::message::LpChange;
 use crate::ygopro::message::Direction;
@@ -26,32 +27,57 @@ pub fn init() -> anyhow::Result<()> {
 }
 
 fn register_handlers() {
-    Handler::before_message::<stoc::DuelStart, _>(100, "lp_recorder_start", |context, _| Box::pin(async move {
+    Handler::follow_message::<stoc::DuelStart, _>(100, "lp_recorder_start", |context, _| Box::pin(async move {
         let room = context.get_room().ok_or(anyhow!("Can't get the room"))?;
         get_player_attachment_sure(context).lp = room.lock().host_info.start_lp as i32;
         Ok(false)
     })).register();
 
-    srvpru_handler!(gm::Damage, get_player_attachment_sure, |context, request| {
-        if context.get_position() != request.player { return Ok(false); }
-        attachment.lp = attachment.lp - request.value;
-        srvpru::server::trigger_internal(*context.addr, LpChange { player: context.get_player().ok_or(anyhow!("Can't get player"))?, lp: attachment.lp}).await;
-    }).register_as("lp_recorder_damage");
+    Handler::before_message::<gm::Damage, _>(100, "lp_recorder_damage", |context, message| Box::pin(async move {
+        if context.get_position() != message.player { return Ok(false); }
+        let lp = {
+            let mut attachment = get_player_attachment_sure(context);
+            attachment.lp -= message.value;
+            attachment.lp
+        };
+        srvpru::server::trigger_internal(context.addr, LpChange { player: context.get_player().ok_or(CommonError::PlayerNotExist)?.clone(), lp}).await?;
+        Ok(false)
+    })).register();
 
-    srvpru_handler!(gm::Recover, get_player_attachment_sure, |context, request| {
-        if context.get_position() != request.player { return Ok(false); }
-        attachment.lp = attachment.lp + request.value;
-    }).register_as("lp_recorder_recover");
 
-    srvpru_handler!(gm::Lpupdate, get_player_attachment_sure, |context, request| {
-        if context.get_position() != request.player { return Ok(false); }
-        attachment.lp = request.lp;
-    }).register_as("lp_recorder_lpupdate");
+    Handler::before_message::<gm::Recover, _>(100, "lp_recorder_recover", |context, message| Box::pin(async move {
+        if context.get_position() != message.player { return Ok(false); }
+        let lp = {
+            let mut attachment = get_player_attachment_sure(context);
+            attachment.lp += message.value;
+            attachment.lp
+        };
+        srvpru::server::trigger_internal(context.addr, LpChange { player: context.get_player().ok_or(CommonError::PlayerNotExist)?.clone(), lp}).await?;
+        Ok(false)
+    })).register();
 
-    srvpru_handler!(gm::PayLpcost, get_player_attachment_sure, |context, request| {
-        if context.get_position() != request.player { return Ok(false); }
-        attachment.lp = attachment.lp - request.cost;
-    }).register_as("lp_recorder_paylp");
+    Handler::before_message::<gm::Lpupdate, _>(100, "lp_recorder_lpupdate", |context, message| Box::pin(async move {
+        if context.get_position() != message.player { return Ok(false); }
+        let lp = {
+            let mut attachment = get_player_attachment_sure(context);
+            attachment.lp = message.lp;
+            attachment.lp
+        };
+        srvpru::server::trigger_internal(context.addr, LpChange { player: context.get_player().ok_or(CommonError::PlayerNotExist)?.clone(), lp}).await?;
+        Ok(false)
+    })).register();
+
+
+    Handler::before_message::<gm::PayLpcost, _>(100, "lp_recorder_paylp", |context, message| Box::pin(async move {
+        if context.get_position() != message.player { return Ok(false); }
+        let lp = {
+            let mut attachment = get_player_attachment_sure(context);
+            attachment.lp -= message.cost;
+            attachment.lp
+        };
+        srvpru::server::trigger_internal(context.addr, LpChange { player: context.get_player().ok_or(CommonError::PlayerNotExist)?.clone(), lp}).await?;
+        Ok(false)
+    })).register();
 
     register_player_attachment_dropper();
     register_player_attachment_mover();

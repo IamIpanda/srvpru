@@ -4,13 +4,14 @@
 //! Force Room host start. Force change side finish in time.
 //! 
 //! Dependency:
-//! - [position_recorder](super::position_recorder)
+//! - [position_recorder](super::recorder::position_recorder)
 // ============================================================
 
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tokio::time::Duration;
 
+use crate::srvpru::CommonError;
 use crate::srvpru::Handler;
 use crate::srvpru::generate_chat;
 
@@ -51,10 +52,10 @@ pub fn init() -> anyhow::Result<()> {
 }
 
 fn register_handlers() {
-    Handler::follow_message(100, "must_start_game", |context, _: &ctos::HsReady| Box::pin(async move {
+    Handler::follow_message::<ctos::HsReady, _>(100, "must_start_game", |context, _| Box::pin(async move {
         get_player_attachment_sure(context).ready = true;
-        let mut room_attachment = get_room_attachment_sure(context);
-        let room = context.get_room().ok_or(anyhow!("Cannot get room"))?;
+        let mut room_attachment = get_room_attachment_sure(context)?;
+        let room = context.get_room().ok_or(CommonError::RoomNotExist)?.clone();
         // room is full check
         {
             let _room = room.lock();
@@ -91,26 +92,26 @@ fn register_handlers() {
         Ok(false)
     })).register();
 
-    Handler::before_message(100, "must_start_game_not_ready", |context, _: &ctos::HsNotReady| Box::pin(async move {
+    Handler::before_message::<ctos::HsNotReady, _>(100, "must_start_game_not_ready", |context, _| Box::pin(async move {
         get_player_attachment_sure(context).ready = false;
-        let mut room_attachment = get_room_attachment_sure(context);
+        let mut room_attachment = get_room_attachment_sure(context)?;
         if let Some(handle) = room_attachment.start_game_watcher.take() {
             handle.abort();
         }
         Ok(false)
     })).register();
 
-    Handler::before_message(254, "must_start_game_started", |context, _: &ctos::HsStart| Box::pin(async move {
-        let mut room_attachment = get_room_attachment_sure(context);
+    Handler::before_message::<ctos::HsStart, _>(254, "must_start_game_started", |context, _| Box::pin(async move {
+        let mut room_attachment = get_room_attachment_sure(context)?;
         if let Some(handler) = room_attachment.start_game_watcher.take() {
             handler.abort();
         }
         Ok(false)
     })).register();
 
-    Handler::follow_message(100, "must_change_side", |context, _: &stoc::ChangeSide| Box::pin(async move {
+    Handler::follow_message::<stoc::ChangeSide, _>(100, "must_change_side", |context, _| Box::pin(async move {
         let mut attachment = get_player_attachment_sure(context);
-        let player = context.get_player().ok_or(anyhow!("Cannot get player"))?;
+        let player = context.get_player().ok_or(CommonError::PlayerNotExist)?.clone();
         let configuration = get_configuration();
         context.send(&generate_chat(&format!("{{side_timeout_part1}}{}{{side_timeout_part2}}", configuration.change_side), Colors::Babyblue, context.get_region())).await.ok();
         attachment.change_side_watcher = Some(tokio::spawn(async move {
@@ -123,7 +124,7 @@ fn register_handlers() {
         Ok(false)
     })).register();
 
-    Handler::follow_message(100, "must_change_side_finished", |context, _: &stoc::DuelStart| Box::pin(async move {
+    Handler::follow_message::<stoc::DuelStart, _>(100, "must_change_side_finished", |context, _| Box::pin(async move {
         let mut attachment = get_player_attachment_sure(context);
         if let Some(handler) = attachment.change_side_watcher.as_mut() {
             handler.abort();

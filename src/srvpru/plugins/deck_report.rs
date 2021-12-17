@@ -4,8 +4,8 @@
 //! Report deck to target endpoint when duel finish.
 //! 
 //! Dependency:
-//! - [deck_recorder](super::deck_recorder)
-//! - [position_recorder](super::position_recorder)
+//! - [deck_recorder](super::recorder::deck_recorder)
+//! - [position_recorder](super::recorder::position_recorder)
 // ============================================================
 
 use crate::srvpru::Handler;
@@ -32,21 +32,21 @@ pub fn init() -> anyhow::Result<()> {
 
 static REQWEST_CLIENT: once_cell::sync::OnceCell<reqwest::Client> = once_cell::sync::OnceCell::new();
 fn register_handlers() {
-    Handler::follow_message::<stoc::DuelStart, _>(100, "deck_reporter", |context, _| Box::pin(async move {
+    Handler::follow_message::<stoc::DuelStart, _>(100, "deck_report", |context, _| Box::pin(async move {
         let decks = context.get_deck().ok_or(anyhow!("Can't get player used deck"))?;
         let deck = decks.history_decks.last().ok_or(anyhow!("Can't get player last deck"))?;
         let configuration = get_configuration();
         let report = DeckReport {
             access_key: configuration.access_key.clone(),
             deck: deck.clone(),
-            player_name: context.get_player().ok_or(anyhow!("Can't get player"))?.lock().name.clone(),
+            player_name: context.get_player().clone().ok_or(anyhow!("Can't get player"))?.lock().name.clone(),
             arena: configuration.arena.clone()
         };
         REQWEST_CLIENT.get_or_init(|| reqwest::Client::new()).post(&configuration.endpoint).form(&report.to_form()).send().await?;
         Ok(false)
     })).register();
 
-    Handler::register_handlers("deck_reporter", crate::ygopro::message::Direction::STOC, vec!["deck_reporter"]);
+    Handler::register_handlers("deck_report", crate::ygopro::message::Direction::STOC, vec!["deck_report"]);
 }
 
 struct DeckReport {

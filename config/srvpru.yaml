@@ -1,12 +1,17 @@
 port: 7911
 ygopro:
-  cwd: /usr/src/app/srvpru/ygopro/
+  cwd: /Users/iami/Programming/mycard/srvpru/ygopro
   binary: ./ygopro
   address: 127.0.0.1
-  wait_start: 0
+  wait_start: 10
+  host_info:
+    time_limit: 233
 plugins:
 - room
 - player
+
+- api
+- chat_command
 
 - stage_recorder
 - position_recorder
@@ -24,3 +29,7 @@ plugins:
 - room_list
 - dialogue
 - must_start
+- tournament
+- anonymous_opponent
+- windbot
+- tip

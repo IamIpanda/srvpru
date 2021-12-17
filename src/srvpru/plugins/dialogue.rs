@@ -26,16 +26,16 @@ pub fn init() -> anyhow::Result<()> {
 }
 
 fn register_handlers() {
-    Handler::follow_message::<gm::Summoning, _>(100, "dialogue_normal_summon", |context, request| Box::pin(async move {
-        if exist_dialogue(request.card) {
-            send_dialogue(context, request.card).await.ok(); // We don't care if dialogue send success
+    Handler::follow_message::<gm::Summoning, _>(100, "dialogue_normal_summon", |context, message| Box::pin(async move {
+        if exist_dialogue(message.card) {
+            send_dialogue(context, message.card).await.ok(); // We don't care if dialogue send success
         }
         Ok(false)
     })).register();
 
-    Handler::follow_message::<gm::Spsummoning, _>(100, "dialogue_special_summon", |context, request| Box::pin(async move {
-        if exist_dialogue(request.card) {
-            send_dialogue(context, request.card).await.ok();
+    Handler::follow_message::<gm::Spsummoning, _>(100, "dialogue_special_summon", |context, message| Box::pin(async move {
+        if exist_dialogue(message.card) {
+            send_dialogue(context, message.card).await.ok();
         }
         Ok(false)
     })).register();

@@ -30,17 +30,15 @@ export_player_attach_as!(is_host, bool, host_transformer);
 
 
 pub fn register_handlers() {
-    Handler::before_message(100, "position_recorder", |context, request: &TypeChange| Box::pin(async move {
+    Handler::before_message::<TypeChange, _>(100, "position_recorder", |context, message| Box::pin(async move {
         let mut attachment = get_player_attachment_sure(context);
-        if let Ok(position) = Netplayer::try_from(request._type & 0xf) {
+        if let Ok(position) = Netplayer::try_from(message._type & 0xf) {
             attachment.position = position;
         }
-        attachment.is_host = request._type & 0xf0 > 0;
+        attachment.is_host = message._type & 0xf0 > 0;
         Ok(false)
-    })).register();
-
+    })).register_for_plugin("position_recorder");
     register_player_attachment_dropper();
-    Handler::register_handlers("position_recorder", crate::ygopro::message::Direction::STOC, vec!["position_recorder"]);
 }
 
 impl Room {

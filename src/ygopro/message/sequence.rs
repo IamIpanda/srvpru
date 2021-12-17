@@ -1,3 +1,9 @@
+// ============================================================
+//  sequence
+// ------------------------------------------------------------
+/// Offer [struct_sequence!] for combining Structs.
+// ============================================================
+
 use serde::Serialize;
 use serde::ser::SerializeTuple;
 use crate::ygopro::message::Struct;
@@ -12,11 +18,13 @@ impl<T: StructSequence> MappedStruct for T {
     }
 }
 
+#[doc(hidden)]
 macro_rules! count {
     () => (0usize);
     ( $x:tt $($xs:tt)* ) => (1usize + count!($($xs)*));
 }
 
+#[doc(hidden)]
 macro_rules! define_struct_sequence {
     ($name: ident, $($T: ident, $n: tt),+) => {
         #[derive(Debug)]
@@ -51,6 +59,7 @@ define_struct_sequence!(StructSequence7, T1, 0, T2, 1, T3, 2, T4, 3, T5, 4, T6, 
 define_struct_sequence!(StructSequence8, T1, 0, T2, 1, T3, 2, T4, 3, T5, 4, T6, 5, T7, 6, T8, 7);
 define_struct_sequence!(StructSequence9, T1, 0, T2, 1, T3, 2, T4, 3, T5, 4, T6, 5, T7, 6, T8, 7, T9, 8);
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! struct_sequence_name {
     ($s1:expr, $s2:expr) => (crate::ygopro::message::sequence::StructSequence2);
@@ -63,6 +72,20 @@ macro_rules! struct_sequence_name {
     ($s1:expr, $s2:expr, $s3:expr, $s4:expr, $s5:expr, $s6:expr, $s7:expr, $s8:expr, $s9:expr) => (crate::ygopro::message::sequence::StructSequence9);
 }
 
+// ----------------------------------------------------------------------------------------------------
+//  struct_sequence!
+// ----------------------------------------------------------------------------------------------------
+/// Generate a tuple, which keeps several messages, which still can normally serialize.
+/// 
+/// Used for merging several message to into one shot.
+/// 
+/// Max length: 9.
+/// 
+/// Example:
+/// ```
+/// context.send(&struct_sequence![message1, message2]).await.ok();
+/// ```
+// ----------------------------------------------------------------------------------------------------
 #[macro_export]
 macro_rules! struct_sequence {
     ($($s: expr),+) => {

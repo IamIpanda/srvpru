@@ -23,15 +23,25 @@ use crate::ygopro::message::ctos::JoinGame;
 use crate::ygopro::message::stoc::DuelStart;
 use crate::ygopro::message::srvpru::RoomDestroy;
 
+set_configuration! {
+    #[serde(default = "default_mode")]   
+    default_mode: String,
+    #[serde(default)]
+    no_rematch: bool
+}
+
+fn default_mode() -> String { return "M".to_string() }
+
 pub fn init() -> anyhow::Result<()> {
     register_handlers();
+    load_configuration()?;
     Ok(())
 }
 
 fn register_handlers() {
-    Handler::before_message::<JoinGame, _>(9, "random_matcher_join_game", |context, request| Box::pin(async move { 
-        let mut password = context.get_string(&request.pass, "pass")?.clone();
-        if password == "" { password = "M".to_string(); }
+    Handler::before_message::<JoinGame, _>(9, "random_matcher_join_game", |context, message| Box::pin(async move { 
+        let mut password = context.get_string(&message.pass, "pass")?.clone();
+        if password == "" { password = get_configuration().default_mode.clone(); }
         let mode = match password.as_str() {
             "S" => Mode::Single,
             "M" => Mode::Match,
@@ -48,7 +58,7 @@ fn register_handlers() {
             }
             else {
                 let room_name = password + "#random_match_" + &chrono::offset::Local::now().timestamp_millis().to_string();
-                let room = Room::get_or_create_by_name(&room_name).await.clone();
+                let room = Room::get_or_create_by_name(&room_name).await?.clone();
                 room.lock().flags.insert("random_match".to_string(), "".to_string());
                 room_pool.push(room.clone());
                 context.send(&generate_chat("{random_duel_enter_room_new}", Colors::Babyblue, context.get_region())).await?;
@@ -56,7 +66,7 @@ fn register_handlers() {
             }
         };
         let socket = context.socket.take().ok_or(anyhow!("Socket already taken."))?;
-        Room::join(room.clone(), &context.addr, socket).await;
+        Room::join(room.clone(), context.addr, socket).await;
         context.send_back(&generate_chat(match mode {
             Mode::Single => "{random_duel_enter_room_single}",
             Mode::Match => "{random_duel_enter_room_match}",
@@ -71,8 +81,8 @@ fn register_handlers() {
         Ok(false)
     })).register();
 
-    Handler::before_message::<RoomDestroy, _>(9, "random_matcher_dropper_on_room_termination", |_, request| Box::pin(async move {
-        remove_room_from_pool(&request.room);
+    Handler::before_message::<RoomDestroy, _>(9, "random_matcher_dropper_on_room_termination", |_, message| Box::pin(async move {
+        remove_room_from_pool(&message.room);
         Ok(false)
     })).register();
 
@@ -103,7 +113,11 @@ fn can_join_room(_context: &mut Context, room: &Arc<Mutex<Room>>) -> bool {
     let room = room.lock();
     let current_count = room.players.len();
     let need_count = PLAYER_COUNT_OF_ROOM.get(&room.host_info.mode).unwrap_or(&0usize);
-    current_count < *need_count
+    if current_count >= *need_count { return false; }
+    if get_configuration().no_rematch {
+           
+    }
+    true
 }
 
 fn remove_room_from_pool(room: &Arc<Mutex<Room>>) {
