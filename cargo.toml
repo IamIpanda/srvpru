@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "ygopro",
+    "srvpru",
+    "srvpru-build-utils",
+    "srvpru-proc-macros",
+]

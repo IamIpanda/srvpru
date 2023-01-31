@@ -1,0 +1,37 @@
+{
+    "srpvru": {
+        "port": 7911,
+        "plugins": [
+            "api",
+            "chat_command",
+            "stage_recorder",
+            "position_recorder",
+            "lp_recorder",
+            "debugger",
+            "welcome",
+            "version_checker",
+            "delayed_replay",
+            "random_match",
+            "result_report",
+            "telescreen",
+            "reconnect",
+            "newspeak",
+            "room_list",
+            "dialogue",
+            "must_start",
+            "tournament",
+            "anonymous_opponent",
+            "windbot",
+            "tip"
+        ]
+    },
+    "ygopro": {
+        "cwd": "/Users/iami/Programming/mycard/srvpru2/ygopro2",
+        "binary": "./ygopro",
+        "address": "127.0.0.1",
+        "wait_start": 10,
+        "host_info": {
+            "time_limit": 233
+        }
+    }
+}
