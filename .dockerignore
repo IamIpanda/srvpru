@@ -1,0 +1,10 @@
+target
+.history
+.vscode
+srvpro-portal/dist
+srvpro-portal/node_modules
+cards.cdb
+script
+notes.md
+todo.md
+AGENTS.md

@@ -1,0 +1,11 @@
+groups:
+  level1:
+    strategy: block
+    words:
+    - 滚
+    - 傻逼
+  level2:
+    strategy: kick
+    words:
+    - 死妈
+    - 草你妈

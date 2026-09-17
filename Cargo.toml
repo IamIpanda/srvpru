@@ -1,0 +1,3 @@
+[workspace]
+members = ["srvpro", "srvpro-api", "srvpro-app"]
+resolver = "2"

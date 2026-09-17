@@ -1,0 +1,16 @@
+[package]
+name = "srvpro-app"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+env_logger = "0.11"
+srvpro = { path = "../srvpro", default-features = false }
+srvpro-api = { path = "../srvpro-api", optional = true }
+
+[features]
+default = ["api", "zip", "card"]
+api = ["dep:srvpro-api"]
+zip = ["srvpro/zip"]
+card = ["srvpro/card"]

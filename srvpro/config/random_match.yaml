@@ -1,0 +1,4 @@
+default: S
+modes:
+- S
+- M
