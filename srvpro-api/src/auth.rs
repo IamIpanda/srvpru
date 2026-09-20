@@ -1,6 +1,7 @@
 //! Account authentication backed by a SQLite account database, by password or by signed token.
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fs::metadata;
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -58,7 +59,7 @@ pub struct Identity {
 #[derive(Clone, Debug)]
 struct User {
     password: String,
-    permissions: HashMap<String, bool>,
+    permissions: HashSet<String>,
 }
 
 #[derive(Default)]
@@ -139,7 +140,7 @@ fn identify(request: &Request, permission: &str) -> Option<Identity> {
         username
     };
     let user = snapshot.users.get(&username)?;
-    user.permissions.get(permission).copied().unwrap_or(false).then_some(Identity { username })
+    user.permissions.contains(permission).then_some(Identity { username })
 }
 
 fn credentials(request: &Request) -> Option<(String, String)> {
@@ -194,12 +195,12 @@ fn now() -> u64 {
 }
 
 fn token_ttl() -> Duration {
-    let days = configuration::get().configurations.get::<Configuration>().map(|configuration| configuration.token_ttl_days).unwrap_or(DEFAULT_TOKEN_TTL_DAYS);
+    let days = configuration::get_configuration::<Configuration>().map(|configuration| configuration.token_ttl_days).unwrap_or(DEFAULT_TOKEN_TTL_DAYS);
     Duration::from_secs(days * 24 * 60 * 60)
 }
 
 fn refresh(snapshot: &mut Snapshot) -> bool {
-    let Some(configuration) = configuration::get().configurations.get::<crate::Configuration>().cloned() else { return false };
+    let Some(configuration) = configuration::get_configuration::<crate::Configuration>() else { return false };
     let database = configuration.database;
     let Ok(modified) = metadata(&database).and_then(|metadata| metadata.modified()) else { return false };
     if snapshot.database == database && snapshot.modified == Some(modified) { return true }
@@ -216,7 +217,7 @@ fn read(database: &str) -> Result<(HashMap<String, User>, Vec<u8>)> {
     let mut users = HashMap::new();
     let mut rows = statement.query([])?;
     while let Some(row) = rows.next()? {
-        let permissions = serde_json::from_str(&row.get::<_, String>(2)?).unwrap_or_default();
+        let permissions = row.get::<_, String>(2)?.split(',').map(|permission| permission.trim().to_owned()).collect();
         users.insert(row.get(0)?, User { password: row.get(1)?, permissions });
     }
     Ok((users, secret))

@@ -27,7 +27,6 @@ use crate::room::STOC_HANDLERS;
 use crate::room::ServerToClientHandler;
 use crate::room::SrvproMessageHandler;
 
-#[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 
 register_dependencies!(

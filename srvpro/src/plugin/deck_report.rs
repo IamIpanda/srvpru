@@ -5,23 +5,21 @@ use std::time::Duration;
 
 use ygopro_data::data::Deck;
 use ygopro_data::message::stoc;
+use ygopro_derive::Attachment;
 use ygopro_derive::Configuration;
 use ygopro_derive::handler;
 use ygopro_derive::register_to;
 
-use crate::plugin::base::count::Count;
 use crate::plugin::register_dependencies;
 use crate::room::Room;
 use crate::room::STOC_HANDLERS;
 use crate::room::ServerToClientHandler;
 
-#[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 
 register_dependencies!(
     crate::plugin::base::deck::NAME,
-    crate::plugin::base::name::NAME,
-    crate::plugin::base::count::NAME
+    crate::plugin::base::name::NAME
 );
 
 #[derive(Clone, Configuration)]
@@ -32,14 +30,19 @@ pub struct Configuration {
     pub arena: String,
 }
 
+#[derive(Attachment)]
+pub struct DeckReported {
+    reported: bool,
+}
+
 #[handler(stoc::DuelStart)]
 #[register_to(STOC_HANDLERS as ServerToClientHandler)]
-fn on_duel_start(room: &mut Room, count: &mut Count, configuration: Configuration) {
+fn on_duel_start(room: &mut Room, deck_reported: &mut DeckReported, configuration: Configuration) {
+    if deck_reported.reported { return }
     if configuration.url.is_empty() {
         log::warn!("deck report url is not configured, skip posting decks.");
         return;
     }
-    if count.count != 0 { return; }
     let mut forms = vec![];
     for (_index, player) in room.players.iter() {
         let Some(decks) = player.states.get::<Vec<Deck>>() else { continue };
@@ -47,6 +50,7 @@ fn on_duel_start(room: &mut Room, count: &mut Count, configuration: Configuratio
         let Some(player_name) = player.states.get::<String>() else { continue };
         forms.push(build_form(deck, player_name, &configuration));
     }
+    deck_reported.reported = true;
     let url = configuration.url;
     tokio::task::spawn_blocking(move || {
         let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(10))).build().into();

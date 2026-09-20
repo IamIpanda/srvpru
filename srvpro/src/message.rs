@@ -85,6 +85,10 @@ pub struct CreateProvider;
 pub struct ProviderFail;
 
 #[derive(Debug, Message)]
+#[message(srvpro, flag = 150)]
+pub struct LPChanged;
+
+#[derive(Debug, Message)]
 #[message(srvpro, flag = 201)]
 pub struct DirectCTOS {
     pub message: ctos::Message,
@@ -208,6 +212,7 @@ generate_enum!(
     CreateRoom = 110,
     CreateProvider = 111,
     ProviderFail = 112,
+    LPChanged = 150,
     DirectCTOS = 201,
     DirectSTOC = 202,
     ProviderTerminate = 254,

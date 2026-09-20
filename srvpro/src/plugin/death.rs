@@ -8,7 +8,6 @@ use ygopro_data::message::gm;
 use ygopro_data::message::stoc;
 use ygopro_derive::Attachment;
 use ygopro_derive::Configuration;
-use ygopro_derive::after;
 use ygopro_derive::handler;
 use ygopro_derive::register_to;
 
@@ -32,7 +31,7 @@ register_dependencies!(
 );
 
 #[derive(Clone)]
-enum QuickDeathRule {
+pub enum QuickDeathRule {
     Death(u8),
 }
 
@@ -118,6 +117,14 @@ fn start_death(room: &mut Room, death: &mut Death, stage: &mut Stage, score: &mu
     }
 }
 
+#[command]
+#[register_to(SRVPRO_COMMANDS as CommandHandler with &'static str)]
+fn cancel_death(room: &mut Room, death: &mut Death) {
+    if death.remain_turns < 0 { return }
+    death.remain_turns = -1;
+    room.broadcast_message(Color::Babyblue, "死亡回合已取消。");
+}
+
 fn kick_from_provider(room: &mut Room, target: Netplayer) {
     let Some(position) = room.players.iter().find_map(|(index, player)| {
         (player.states.get::<Netplayer>() == Some(&target)).then_some(index)
@@ -152,11 +159,9 @@ fn on_new_turn(room: &mut Room, index: usize, death: &mut Death, lp: &mut Lp, fi
     }
 }
 
-#[after(gm::LPUpdate)]
-#[register_to(GM_HANDLERS as GameMessageHandler)]
-fn on_lp_update(room: &mut Room, index: usize, death: &mut Death, lp: &mut Lp, first_attack: &mut FirstAttack, tag: TagFlag) {
-    let Some(player) = room.players.get(index) else { return };
-    if player.states.get::<bool>() != Some(&true) { return };
+#[handler(crate::message::LPChanged)]
+#[register_to(SRVPRO_HANDLERS as SrvproMessageHandler)]
+fn on_lp_changed(room: &mut Room, death: &mut Death, lp: &mut Lp, first_attack: &mut FirstAttack, tag: TagFlag) {
     if death.remain_turns != 0 { return }
     sudden_death_judge(room, death, lp, first_attack, tag.0);
 }

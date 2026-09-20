@@ -1,3 +1,8 @@
 [workspace]
 members = ["srvpro", "srvpro-api", "srvpro-app"]
 resolver = "2"
+
+[profile.release]
+lto = true
+strip = true
+opt-level = 'z'

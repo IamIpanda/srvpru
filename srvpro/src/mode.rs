@@ -1,5 +1,5 @@
 mod basic;
-mod common;
+pub(crate) mod common;
 mod srvpru;
 
 use std::future::Future;
@@ -163,6 +163,7 @@ pub struct RoomProviderConfiguration {
 
 pub struct RoomConfiguration {
     pub name: String,
+    pub origin_name: String,
     pub srvpro_configuration: crate::configuration::Configuration,
     pub provider_configuration: RoomProviderConfiguration,
     pub states: Anymap
@@ -170,7 +171,7 @@ pub struct RoomConfiguration {
 
 impl Default for RoomConfiguration {
     fn default() -> Self {
-        Self { name: Default::default(), srvpro_configuration: (*crate::configuration::get()).clone(), provider_configuration: Default::default(), states: Default::default() }
+        Self { name: Default::default(), origin_name: Default::default(), srvpro_configuration: (*crate::configuration::get()).clone(), provider_configuration: Default::default(), states: Default::default() }
     }
 }
 
@@ -238,9 +239,10 @@ impl RoomConfiguration {
         Self::default().analyze_hash(pass).await
     }
 
-    async fn analyze_hash(mut self, name: &str) -> Self {
-        let (modes, name) = name.split_once('#').unwrap_or(("", name));
-        self.name = name.to_string();
+    async fn analyze_hash(mut self, pass: &str) -> Self {
+        let (modes, _) = pass.split_once('#').unwrap_or(("", pass));
+        self.name = pass.to_string();
+        self.origin_name = pass.to_string();
         let mut this = self;
         let response = {
             let bundle = Bundle::new(modes.to_string(), this, ModeResponse::default());

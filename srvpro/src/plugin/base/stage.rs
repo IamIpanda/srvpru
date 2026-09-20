@@ -1,9 +1,12 @@
 use ygopro_data::constants::DuelStage;
+use ygopro_data::message::gm;
 use ygopro_data::message::stoc;
 use ygopro_derive::Attachment;
 use ygopro_derive::handler;
 use ygopro_derive::register_to;
 
+use crate::room::GM_HANDLERS;
+use crate::room::GameMessageHandler;
 use crate::room::STOC_HANDLERS;
 use crate::room::ServerToClientHandler;
 
@@ -13,6 +16,13 @@ pub static NAME: &'static str = module_path!();
 pub struct Stage {
     #[attachment(default = "DuelStage::Begin")]
     pub stage: DuelStage,
+}
+
+#[handler(stoc::DuelStart)]
+#[register_to(STOC_HANDLERS as ServerToClientHandler)]
+fn on_duel_start(stage: &mut Stage) {
+    if stage.stage != DuelStage::Begin { return }
+    stage.stage = DuelStage::Finger;
 }
 
 #[handler(stoc::SelectHand)]
@@ -27,12 +37,6 @@ fn on_select_tp(stage: &mut Stage) {
     stage.stage = DuelStage::Firstgo;
 }
 
-#[handler(stoc::DuelStart)]
-#[register_to(STOC_HANDLERS as ServerToClientHandler)]
-fn on_duel_start(stage: &mut Stage) {
-    stage.stage = DuelStage::Dueling;
-}
-
 #[handler(stoc::ChangeSide)]
 #[register_to(STOC_HANDLERS as ServerToClientHandler)]
 fn on_change_side(stage: &mut Stage) {
@@ -43,4 +47,10 @@ fn on_change_side(stage: &mut Stage) {
 #[register_to(STOC_HANDLERS as ServerToClientHandler)]
 fn on_duel_end(stage: &mut Stage) {
     stage.stage = DuelStage::End;
+}
+
+#[handler(gm::Start)]
+#[register_to(GM_HANDLERS as GameMessageHandler)]
+fn on_start(stage: &mut Stage) {
+    stage.stage = DuelStage::Dueling;
 }

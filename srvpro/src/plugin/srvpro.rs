@@ -50,7 +50,14 @@ fn on_client_leave(room: &mut Room, client_leave: &mut srvpro::ClientLeave) {
 async fn on_join_game_create(room: &mut Room, states: &mut Anymap) {
     if room.provider.is_some() { return }
     let Some(provider_configuration) = states.get_mut::<RoomProviderConfiguration>() else { return };
+    let hostinfo = provider_configuration.hostinfo.clone();
+    let provider_type = provider_configuration.provider;
     if let Ok(mut provider) = provider_configuration.create_room_provider(room.name.clone()).await {
+        // we directly set hostinfo and provider here.
+        // removing provider configuration is just for stopping fucking code agent (deepseek, I MEAN YOU!) extracting it.
+        states.insert(hostinfo);
+        states.insert(provider_type);
+        states.remove::<RoomProviderConfiguration>();
         let room_sender = room.request_sender.clone();
         room_sender.unbounded_send(Request::Ex(srvpro::CreateProvider.into(), 0)).ok();
         let finish_signal = provider.get_finish_signal();

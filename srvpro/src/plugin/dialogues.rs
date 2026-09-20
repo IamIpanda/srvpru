@@ -43,7 +43,7 @@ impl FromStr for Dialogues {
 struct ReadyTrap(bool);
 
 fn is_host(room: &Room, index: usize) -> bool {
-    room.players.get(index).and_then(|player| player.states.get::<bool>().copied()).unwrap_or(false)
+    room.players.get(index).and_then(|player: &crate::room::Player| player.states.get::<bool>().copied()).unwrap_or(false)
 }
 
 #[handler(gm::Summoning)]

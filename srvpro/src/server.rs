@@ -36,8 +36,7 @@ pub struct Configuration {
 #[register_to(crate::SRVPRO_GLOBAL_HANDLERS as GlobalHandler)]
 fn on_init() {
     tokio::spawn(async {
-        let configuration = crate::configuration::get();
-        let port = configuration.configurations.get::<Configuration>().map(|c| c.port).unwrap_or(7911);
+        let port = crate::configuration::get_configuration::<Configuration>().map(|c| c.port).unwrap_or(7911);
         let listener = tokio::net::TcpListener::bind(("0.0.0.0", port)).await.expect("cannot bind port");
         log::info!("listening on port {}", port);
         loop {

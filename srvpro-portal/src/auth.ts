@@ -1,7 +1,14 @@
+import { route } from 'preact-router'
+
 const TOKEN_KEY = 'srvpro_token'
 
 export function token(): string | null {
   return localStorage.getItem(TOKEN_KEY)
+}
+
+export function expire(): void {
+  localStorage.removeItem(TOKEN_KEY)
+  route('/login')
 }
 
 export async function login(username: string, password: string): Promise<void> {

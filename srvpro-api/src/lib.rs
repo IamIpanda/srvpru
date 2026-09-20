@@ -12,10 +12,18 @@ use tower_http::services::ServeFile;
 use ygopro_derive::Configuration;
 
 pub mod auth;
+pub mod bad_words;
 pub mod bootstrap;
+pub mod config;
+pub mod database;
+pub mod death;
+pub mod dialogues;
+pub mod plugin;
 pub mod roomlist;
 pub mod shout;
 pub mod stop;
+pub mod user;
+pub mod welcome;
 
 #[macro_use]
 extern crate ygopro_derive;
@@ -29,7 +37,7 @@ pub static SRVPRO_API_ROUTERS: [(&'static str, fn() -> Router)];
 pub static NAME: &'static str = module_path!();
 
 #[derive(Clone, Configuration)]
-#[config(sync, register_to = "srvpro::plugin::CONFIGURATIONS")]
+#[config(sync, prefix = "api", register_to = "srvpro::plugin::CONFIGURATIONS")]
 pub struct Configuration {
     #[config(default = "7922")]
     pub port: u16,
@@ -37,6 +45,8 @@ pub struct Configuration {
     pub database: String,
     #[config(default = "\"portal\".to_string()")]
     pub static_dir: String,
+    #[config(default = "\"Srvpru Server\".to_string()")]
+    pub name: String,
 }
 
 static ROUTER: LazyLock<ArcSwap<Router>> = LazyLock::new(|| ArcSwap::from_pointee(build_router_from_configuration()));
@@ -54,7 +64,7 @@ fn on_configuration_changed() {
 }
 
 pub async fn serve() {
-    let Some(configuration) = srvpro::configuration::get().configurations.get::<Configuration>().cloned() else { return };
+    let Some(configuration) = srvpro::configuration::get_configuration::<Configuration>() else { return };
     let port = configuration.port;
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port)).await.expect("cannot bind port");
     log::info!("api listening on port {}", port);
@@ -63,7 +73,7 @@ pub async fn serve() {
 
 fn build_router_from_configuration() -> Router {
     let configuration = srvpro::configuration::get();
-    let static_dir = configuration.configurations.get::<Configuration>().map(|configuration| configuration.static_dir.clone()).unwrap_or_default();
+    let static_dir = srvpro::configuration::get_configuration::<Configuration>().map(|configuration| configuration.static_dir).unwrap_or_default();
     build_router(&configuration.enable_plugins, &static_dir)
 }
 

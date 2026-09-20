@@ -33,7 +33,7 @@ export function Login() {
   return (
     <div class="login">
       <Card style={{ width: 360 }}>
-        <Typography.Title level={3} style={{ marginTop: 0 }}>srvpro</Typography.Title>
+        <Typography.Title level={3} style={{ marginTop: 0 }}>Srvpru</Typography.Title>
         {error && <Alert type="error" message={error} showIcon style={{ marginBottom: 16 }} />}
         <Form<Credentials> layout="vertical" onFinish={submit}>
           <Form.Item name="username" label="用户名" rules={[{ required: true, message: '请输入用户名' }]}>

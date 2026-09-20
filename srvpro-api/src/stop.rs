@@ -30,8 +30,19 @@ struct StopResult {
     payload: String,
 }
 
+#[derive(Serialize)]
+struct StopState {
+    stopped: bool,
+}
+
 fn build_stop_router() -> Router {
-    auth::required(PERMISSION, Router::new().route("/api/stop", get(stop)))
+    auth::required(PERMISSION, Router::new()
+        .route("/api/stop", get(stop))
+        .route("/api/getstop", get(get_stop)))
+}
+
+async fn get_stop() -> Json<StopState> {
+    Json(StopState { stopped: srvpro::configuration::get().enable_plugins.contains(srvpro::plugin::stop::NAME) })
 }
 
 async fn stop(Query(query): Query<StopQuery>) -> Result<Json<StopResult>, StatusCode> {

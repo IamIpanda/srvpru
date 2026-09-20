@@ -36,11 +36,23 @@ RUN if [ "$WITH_API" = "true" ]; then \
     fi \
     && cargo build --release --target x86_64-unknown-linux-musl -p srvpro-app --no-default-features --features "$FEATURES"
 
+FROM alpine:latest AS compress
+ARG PROXY
+ENV http_proxy=$PROXY \
+    https_proxy=$PROXY \
+    HTTP_PROXY=$PROXY \
+    HTTPS_PROXY=$PROXY
+RUN apk add --no-cache upx
+COPY --from=build /build/target/x86_64-unknown-linux-musl/release/srvpro-app /srvpro
+RUN upx --best --lzma /srvpro
+
 FROM alpine:latest
 WORKDIR /srvpro
-ENV RUST_MIN_STACK=16777216
-COPY --from=build /build/target/x86_64-unknown-linux-musl/release/srvpro-app srvpro
+ENV RUST_MIN_STACK=16777216 \
+    SRVPRO_CONFIG_PATH=/srvpro/config
+COPY --from=compress /srvpro /srvpro
 COPY --from=portal /portal/dist ./portal
+COPY srvpro/config ./config
 EXPOSE 7911
 EXPOSE 7922
 ENTRYPOINT ["/srvpro/srvpro"]

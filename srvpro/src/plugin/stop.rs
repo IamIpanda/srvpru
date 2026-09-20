@@ -26,12 +26,8 @@ pub struct Configuration {
 #[before(ctos::JoinGame)]
 #[register_to(CTOS_PREHANDLERS as ClientToServerPrecursorHandler)]
 fn refuse_join(player: &mut Player, stop: &mut StopFlag) -> &'static str {
-    let configuration = crate::configuration::get();
-    let Some(configuration) = configuration.configurations.get::<Configuration>().cloned() else { return "continue" };
-    player.server_to_client_sink_towards_network.unbounded_send(Complex::from_message(stoc::Chat {
-        player: Color::Red.into(),
-        msg: configuration.message.into(),
-    }.into())).ok();
+    let Some(configuration) = crate::configuration::get_configuration::<Configuration>() else { return "continue" };
+    player.send_message(&configuration.message, Color::Red);
     player.server_to_client_sink_towards_network.unbounded_send(Complex::from_message(stoc::ErrorMessage {
         err: ErrorMessage::JoinError(JoinError::HostRefused),
     }.into())).ok();

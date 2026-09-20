@@ -1,4 +1,5 @@
 pub mod config_manager {
+    use std::collections::BTreeMap;
     use std::fs;
     use std::path::Path;
     use std::sync::Arc;
@@ -34,6 +35,10 @@ pub mod config_manager {
 
         pub fn get(&self, key: &str) -> Option<&str> {
             self.entries.get(key).map(|s| s.as_str())
+        }
+
+        pub fn prefixed(&self, prefix: &str) -> BTreeMap<String, String> {
+            self.entries.iter().filter(|(key, _)| key.starts_with(prefix)).map(|(key, value)| (key.clone(), value.clone())).collect()
         }
     }
 
@@ -110,5 +115,23 @@ pub mod config_manager {
 
     pub fn load() -> arc_swap::Guard<Arc<ConfigManager>> {
         CONFIG_MANAGER.load()
+    }
+
+    pub fn update(entries: Vec<(String, String)>) {
+        CONFIG_MANAGER.rcu(|current| {
+            let mut next = ConfigManager { entries: current.entries.clone() };
+            next.entries.extend(entries.iter().cloned());
+            Arc::new(next)
+        });
+    }
+
+    pub fn remove(keys: &[String]) {
+        CONFIG_MANAGER.rcu(|current| {
+            let mut next = ConfigManager { entries: current.entries.clone() };
+            for key in keys {
+                next.entries.remove(key);
+            }
+            Arc::new(next)
+        });
     }
 }

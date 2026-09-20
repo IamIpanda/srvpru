@@ -1,15 +1,15 @@
 mod srvpro;
 mod chat_command;
-mod welcome;
+pub mod welcome;
 mod random_match;
 mod tip;
 mod virtual_password;
 mod delay_replay;
-mod dialogues;
+pub mod dialogues;
 mod hide_name;
 mod report;
 mod deck_report;
-mod bad_words;
+pub mod bad_words;
 mod retry_handle;
 mod chat_color;
 mod death;

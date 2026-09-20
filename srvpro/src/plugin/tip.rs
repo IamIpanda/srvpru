@@ -62,8 +62,7 @@ fn on_plugin_disabled(event: &srvpro::PluginDisabled) {
 }
 
 fn start() {
-    let configuration = crate::configuration::get();
-    let Some(configuration) = configuration.configurations.get::<Configuration>().cloned() else { return };
+    let Some(configuration) = crate::configuration::get_configuration::<Configuration>() else { return };
     if !configuration.enabled { return }
     let mut timer = TIMER.write();
     if timer.is_some() { return }

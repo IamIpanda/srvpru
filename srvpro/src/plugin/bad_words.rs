@@ -1,6 +1,7 @@
 //! Filter player names, chat messages and room names against configurable
 //! bad-word groups, using Aho-Corasick for multi-pattern matching.
 
+use std::ops::Mul;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -82,12 +83,16 @@ pub enum Strategy {
     Kick,
 }
 
-fn worst_strategy(current: Strategy, other: Strategy) -> Strategy {
-    match (current, other) {
-        (Strategy::Kick, _) | (_, Strategy::Kick) => Strategy::Kick,
-        (Strategy::Warn, _) | (_, Strategy::Warn) => Strategy::Warn,
-        (Strategy::Echo, _) | (_, Strategy::Echo) => Strategy::Echo,
-        _ => Strategy::Block,
+impl Mul for Strategy {
+    type Output = Strategy;
+
+    fn mul(self, other: Strategy) -> Strategy {
+        match (self, other) {
+            (Strategy::Kick, _) | (_, Strategy::Kick) => Strategy::Kick,
+            (Strategy::Warn, _) | (_, Strategy::Warn) => Strategy::Warn,
+            (Strategy::Echo, _) | (_, Strategy::Echo) => Strategy::Echo,
+            _ => Strategy::Block,
+        }
     }
 }
 
@@ -96,7 +101,7 @@ fn check(text: &str, groups: &Groups) -> Option<Strategy> {
     for group in groups.0.values() {
         if group.words.is_match(text) {
             worst = Some(match worst {
-                Some(current) => worst_strategy(current, group.strategy),
+                Some(current) => current * group.strategy,
                 None => group.strategy,
             });
         }
@@ -106,48 +111,44 @@ fn check(text: &str, groups: &Groups) -> Option<Strategy> {
 
 #[handler(ctos::PlayerInfo, priority = 251)]
 #[register_to(CTOS_PREHANDLERS as ClientToServerPrecursorHandler)]
-fn on_player_info(player: &mut Player, player_info: &ctos::PlayerInfo) -> &'static str {
-    let Some(configuration) = crate::configuration::get().configurations.get::<Configuration>().cloned() else { return "continue" };
-    if !configuration.check_player_name { return "continue" }
-    let Some(strategy) = check(&*player_info.name, &configuration.groups) else { return "continue" };
+fn on_player_info(player: &mut Player, player_info: &ctos::PlayerInfo) -> Option<&'static str> {
+    let configuration = crate::configuration::get_configuration::<Configuration>()?;
+    if !configuration.check_player_name { return None }
+    let strategy = check(&*player_info.name, &configuration.groups)?;
     match strategy {
         Strategy::Warn => {
             player.send_message("昵称包含不当词汇，请及时修改", Color::Red);
-            "continue"
+            None
         }
         _ => {
             player.send_message("昵称包含不当词汇，你已被踢出服务器", Color::Red);
-            "kick"
+            Some("kick")
         }
     }
 }
 
 #[before(ctos::JoinGame)]
 #[register_to(CTOS_PREHANDLERS as ClientToServerPrecursorHandler)]
-fn before_join_game(join_game: &ctos::JoinGame, stop: &mut StopFlag) -> &'static str {
-    let configuration = crate::configuration::get();
-    let Some(configuration) = configuration.configurations.get::<Configuration>() else { return "continue" };
-    if !configuration.check_room_name { return "continue" }
-    if check(&*join_game.pass, &configuration.groups).is_some() {
-        stop.0 = true;
-        "kick"
-    } else {
-        "continue"
-    }
+fn before_join_game(join_game: &ctos::JoinGame, stop: &mut StopFlag) -> Option<&'static str> {
+    let configuration = crate::configuration::get_configuration::<Configuration>()?;
+    if !configuration.check_room_name { return None }
+    check(&*join_game.pass, &configuration.groups)?;
+    stop.0 = true;
+    Some("kick")
 }
 
 #[before(ctos::Chat)]
 #[register_to(CTOS_HANDLERS as ClientToServerHandler)]
-fn before_chat(room: &mut Room, index: usize, chat: &ctos::Chat, stop: &mut StopFlag, configuration: Configuration) -> &'static str {
-    let Some(strategy) = check(&*chat.msg, &configuration.groups) else { return "continue" };
+fn before_chat(room: &mut Room, index: usize, chat: &ctos::Chat, stop: &mut StopFlag, configuration: Configuration) -> Option<&'static str> {
+    let strategy = check(&*chat.msg, &configuration.groups)?;
     stop.0 = true;
     match strategy {
-        Strategy::Block => "cancel",
+        Strategy::Block => Some("cancel"),
         Strategy::Warn => {
             if let Some(player) = room.players.get(index) {
                 player.send_message("请勿发送不当言论", Color::Red);
             }
-            "cancel"
+            Some("cancel")
         }
         Strategy::Echo => {
             if let Some(player) = room.players.get(index) && let Some(netplayer) = player.states.get::<Netplayer>() {
@@ -156,13 +157,13 @@ fn before_chat(room: &mut Room, index: usize, chat: &ctos::Chat, stop: &mut Stop
                     msg: chat.msg.clone(),
                 }.into())).ok();
             }
-            "cancel"
+            Some("cancel")
         }
         Strategy::Kick => {
             if let Some(player) = room.players.get(index) {
                 player.send_message("发言包含不当词汇，你已被移出房间", Color::Red);
             }
-            "kick"
+            Some("kick")
         }
     }
 }

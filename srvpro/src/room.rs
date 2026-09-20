@@ -433,16 +433,16 @@ impl RoomHost {
 
     pub async fn new(pass: &str) -> mpsc::UnboundedSender<Request> {
         let room_configuration = RoomConfiguration::new(pass).await;
-        let name = room_configuration.name;
+        let origin_name = room_configuration.origin_name;
         let mut states = room_configuration.states;
         states.insert(room_configuration.provider_configuration);
         let mut guard = ROOMS.write();
-        if let Some(existing) = guard.get(&name) {
+        if let Some(existing) = guard.get(&origin_name) {
             return existing.sender.clone();
         }
-        let room: RoomHost = Self::allocate(name.clone(), room_configuration.srvpro_configuration, states);
+        let room: RoomHost = Self::allocate(room_configuration.name, room_configuration.srvpro_configuration, states);
         let sender = room.sender.clone();
-        guard.insert(name, room);
+        guard.insert(origin_name, room);
         sender.unbounded_send(Request::Ex(srvpro::CreateRoom.into(), 0)).ok();
         sender
     }

@@ -7,6 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': 'http://127.0.0.1:7922',
+      '/roomlist': { target: 'http://127.0.0.1:7922', ws: true },
     },
   },
 })

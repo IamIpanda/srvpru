@@ -32,12 +32,16 @@ impl Configuration {
         }
     }
 
-    pub fn enable_plugin(&mut self, plugin_name: &str) {
-        if !self.enable_plugins.insert(plugin_name.to_string()) { return }
-        log::info!("Enable plugin {}", plugin_name);
+    fn init_plugin(&mut self, plugin_name: &str) {
         for (name, init_configuration) in crate::plugin::SRVPRO_CONFIGURATIONS {
             if plugin_name == *name { init_configuration(&mut self.configurations).ok(); }
         }
+    }
+
+    pub fn enable_plugin(&mut self, plugin_name: &str) {
+        if !self.enable_plugins.insert(plugin_name.to_string()) { return }
+        log::debug!("Enable plugin {}", plugin_name);
+        self.init_plugin(plugin_name);
         for (name, dependencies) in crate::plugin::SRVPRO_PLUGIN_DEPENDENCY {
             if plugin_name == *name {
                 for dependency in *dependencies {
@@ -68,6 +72,10 @@ static CONFIGURATION: LazyLock<ArcSwap<Configuration>> = LazyLock::new(|| ArcSwa
 
 pub fn get() -> Arc<Configuration> {
     CONFIGURATION.load_full()
+}
+
+pub fn get_configuration<T: Clone + Send + Sync + 'static>() -> Option<T> {
+    CONFIGURATION.load_full().configurations.get::<T>().cloned()
 }
 
 #[handler(srvpro::Init)]
@@ -105,5 +113,28 @@ pub async fn disable(plugin_name: &str) {
         Arc::new(next)
     });
     crate::process(srvpro::PluginDisabled { module_name: plugin_name.to_string() }.into_message()).await;
+    crate::process(srvpro::ConfigurationChanged.into_message()).await;
+}
+
+pub async fn update_configuration<PluginConfiguration>(configuration: PluginConfiguration) where PluginConfiguration: Clone + Send + Sync + 'static {
+    CONFIGURATION.rcu(|current| {
+        let mut next = (**current).clone();
+        next.configurations.insert(configuration.clone());
+        Arc::new(next)
+    });
+}
+
+pub fn rebuild<PluginName: AsRef<str>>(plugin_names: &[PluginName]) {
+    CONFIGURATION.rcu(|current| {
+        let mut next = (**current).clone();
+        for plugin_name in plugin_names {
+            next.init_plugin(plugin_name.as_ref());
+        }
+        Arc::new(next)
+    });
+}
+
+pub async fn rebuild_and_notify<PluginName: AsRef<str>>(plugin_names: &[PluginName]) {
+    rebuild(plugin_names);
     crate::process(srvpro::ConfigurationChanged.into_message()).await;
 }

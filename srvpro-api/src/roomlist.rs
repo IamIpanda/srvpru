@@ -91,6 +91,7 @@ struct View {
 struct RoomSnapshot {
     name: String,
     mode: Option<u8>,
+    stage: Option<u8>,
     users: Vec<UserSnapshot>,
     started: bool,
 }
@@ -120,6 +121,7 @@ struct RoomSummary {
     roomid: Option<String>,
     roomname: String,
     roommode: Option<u8>,
+    stage: Option<u8>,
     needpass: String,
     users: Vec<UserSummary>,
     istart: String,
@@ -164,6 +166,7 @@ impl RoomSnapshot {
             roomid: None,
             roomname: if view.authenticated { self.name.clone() } else { self.name.split('$').next().unwrap_or_default().to_string() },
             roommode: self.mode,
+            stage: self.stage,
             needpass: self.name.contains('$').to_string(),
             users: self.users.iter().map(|user| user.summarize(view)).collect(),
             istart: if self.started { "start" } else { "wait" }.to_string(),
@@ -202,13 +205,18 @@ fn summarize(event: &Event, view: View) -> EventSummary {
 #[serde(rename_all = "lowercase")]
 enum Filter {
     #[default]
+    All,
     Waiting,
     Started,
 }
 
 impl Filter {
     fn holds(self, started: bool) -> bool {
-        (self == Filter::Started) == started
+        match self {
+            Filter::All => true,
+            Filter::Waiting => !started,
+            Filter::Started => started,
+        }
     }
 }
 
@@ -258,7 +266,7 @@ async fn room_list_ws(upgrade: WebSocketUpgrade, Query(query): Query<RoomlistQue
 }
 
 fn view(identity: Option<&Identity>) -> View {
-    let configuration = configuration::get().configurations.get::<Configuration>().cloned().unwrap_or_default();
+    let configuration = configuration::get_configuration::<Configuration>().unwrap_or_default();
     View {
         authenticated: identity.is_some(),
         show_ip: configuration.show_ip,
@@ -267,7 +275,7 @@ fn view(identity: Option<&Identity>) -> View {
 }
 
 fn public_roomlist() -> bool {
-    configuration::get().configurations.get::<Configuration>().cloned().unwrap_or_default().public_roomlist
+    configuration::get_configuration::<Configuration>().unwrap_or_default().public_roomlist
 }
 
 async fn serve(mut socket: WebSocket, filter: Filter, view: View) {
@@ -316,6 +324,7 @@ struct StatusContext<'a> {
     start_lp: i32,
     start_hand: u8,
     tag: bool,
+    stage: Option<&'a DuelStage>,
     score: Option<&'a Score>,
     lp: Option<&'a Lp>,
 }
@@ -334,11 +343,12 @@ impl StatusContext<'_> {
 }
 
 fn room_snapshot(room: &Room, states: &Anymap) -> RoomSnapshot {
-    let hostinfo = states.get::<RoomProviderConfiguration>().map(|provider_configuration| provider_configuration.hostinfo.clone()).unwrap_or_default();
+    let hostinfo = states.get::<ygopro_data::message::HostInfo>().cloned().unwrap_or_default();
     let in_duel = started(states);
     let status = StatusContext {
         start_lp: hostinfo.start_lp as i32,
         start_hand: hostinfo.start_hand,
+        stage: states.get(),
         tag: states.get::<Tag>().is_some(),
         score: states.get::<Score>(),
         lp: states.get::<Lp>(),
@@ -346,6 +356,7 @@ fn room_snapshot(room: &Room, states: &Anymap) -> RoomSnapshot {
     RoomSnapshot {
         name: room.name.clone(),
         mode: Some(u8::from(hostinfo.mode)),
+        stage: states.get::<Stage>().map(|stage| u8::from(stage.stage)),
         users: room.players.iter().filter_map(|(_, player)| snapshot_user(player, in_duel, status)).collect(),
         started: in_duel,
     }
