@@ -1,0 +1,9 @@
+pub mod bad_words;
+pub mod death;
+pub mod dialogues;
+pub mod plugin;
+pub mod roomlist;
+pub mod shout;
+pub mod stop;
+pub mod user;
+pub mod welcome;

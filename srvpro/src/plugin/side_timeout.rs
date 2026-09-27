@@ -38,10 +38,10 @@ fn on_change_side(room: &mut Room, index: usize, configuration: Configuration) {
     let handle = tokio::spawn(async move {
         for remaining in (1..configuration.side_timeout).rev() {
             tokio::time::sleep(Duration::from_secs(60)).await;
-            sender.unbounded_send(Request::Ex(srvpro::DirectSTOC { message: stoc::Chat { player: Color::Babyblue.into(), msg: format!("剩余 {} 分钟", remaining).into() }.into(), target: Some(index) }.into(), index)).ok();
+            sender.unbounded_send(Request::Ex(srvpro::ServerMessage { color: Color::Babyblue, message: format!("剩余 {} 分钟", remaining), target: Some(index) }.into(), index)).ok();
         }
         tokio::time::sleep(Duration::from_secs(60)).await;
-        sender.unbounded_send(Request::Ex(srvpro::DirectSTOC { message: stoc::Chat { player: Color::Red.into(), msg: "换side超时".to_string().into() }.into(), target: Some(index) }.into(), index)).ok();
+        sender.unbounded_send(Request::Ex(srvpro::ServerMessage { color: Color::Red, message: "换side超时".to_string(), target: Some(index) }.into(), index)).ok();
         sender.unbounded_send(Request::Ex(srvpro::ClientLeave { position: index }.into(), index)).ok();
     });
     if let Some(task) = room.players[index].states.remove::<SideTimeoutTask>() {

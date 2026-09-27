@@ -6,7 +6,6 @@ use axum::Json;
 use axum::Router;
 use axum::http::StatusCode;
 use axum::routing::get;
-use linkme::distributed_slice;
 use serde::Deserialize;
 use serde::Serialize;
 

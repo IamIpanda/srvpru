@@ -1,4 +1,3 @@
-use linkme::distributed_slice;
 use ygopro_data::constants::Color;
 use ygopro_data::message::ctos;
 use ygopro_handler::StopFlag;

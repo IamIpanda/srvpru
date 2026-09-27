@@ -6,6 +6,72 @@ use ygopro_data::message::stoc;
 use crate::room::Player;
 
 #[derive(Debug, Message)]
+#[message(srvpro, flag = 1)]
+pub struct Init {
+    pub enable_plugins: hashbrown::HashSet<String>,
+}
+
+impl Default for Init {
+    fn default() -> Self {
+        Self { enable_plugins: crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS.iter().map(|plugin_name| plugin_name.to_string()).collect() }
+    }
+}
+
+impl<State, Res> ygopro_handler::FromRequest<Message, State, Res> for &mut Init
+where
+    State: Send,
+    Res: Send,
+{
+    fn from_request(bundle: &mut ygopro_handler::Bundle<Message, State, Res>) -> Option<Self> {
+        if let Message::Init(inner) = &mut bundle.request {
+            Some(unsafe { &mut *(inner as *mut Init) })
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Message)]
+#[message(srvpro, flag = 2)]
+pub struct ConfigurationChanged;
+
+#[derive(Debug, Message)]
+#[message(srvpro, flag = 3)]
+pub struct PluginEnabled {
+    pub module_name: String,
+}
+
+#[derive(Debug, Message)]
+#[message(srvpro, flag = 4)]
+pub struct PluginDisabled {
+    pub module_name: String,
+}
+
+#[derive(Debug, Message)]
+#[message(srvpro, flag = 11)]
+pub struct ClientConnect {
+    pub player: Player,
+}
+
+impl<State, Res> ygopro_handler::FromRequest<Message, State, Res> for &mut ClientConnect
+where
+    State: Send,
+    Res: Send,
+{
+    fn from_request(bundle: &mut ygopro_handler::Bundle<Message, State, Res>) -> Option<Self> {
+        if let Message::ClientConnect(inner) = &mut bundle.request {
+            Some(unsafe { &mut *(inner as *mut ClientConnect) })
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Message)]
+#[message(srvpro, flag = 14)]
+pub struct ClientRefused;
+
+#[derive(Debug, Message)]
 #[message(srvpro, flag = 101)]
 pub struct PlayerJoin {
     pub player: Option<Player>,
@@ -103,27 +169,11 @@ pub struct DirectSTOC {
 }
 
 #[derive(Debug, Message)]
-#[message(srvpro, flag = 14)]
-pub struct ClientRefused;
-
-#[derive(Debug, Message)]
-#[message(srvpro, flag = 1)]
-pub struct Init;
-
-#[derive(Debug, Message)]
-#[message(srvpro, flag = 2)]
-pub struct ConfigurationChanged;
-
-#[derive(Debug, Message)]
-#[message(srvpro, flag = 3)]
-pub struct PluginEnabled {
-    pub module_name: String,
-}
-
-#[derive(Debug, Message)]
-#[message(srvpro, flag = 4)]
-pub struct PluginDisabled {
-    pub module_name: String,
+#[message(srvpro, flag = 203)]
+pub struct ServerMessage {
+    pub color: ygopro_data::constants::Color,
+    pub message: String,
+    pub target: Option<usize>,
 }
 
 
@@ -158,12 +208,6 @@ macro_rules! generate_enum {
                     Message::$message_name(value)
                 }
             }
-
-            // impl From<$message_name> for crate::common::RequestEx {
-            //     fn from(message: $message_name) -> Self {
-            //         crate::common::RequestEx { message: message.into(), extra: () }
-            //     }
-            // }
 
             impl TryFrom<Message> for $message_name {
                 type Error = ygopro_data::message::Error;
@@ -204,8 +248,8 @@ generate_enum!(
     ConfigurationChanged = 2,
     PluginEnabled = 3,
     PluginDisabled = 4,
+    ClientConnect = 11,
     ClientRefused = 14,
-
     PlayerJoin = 101,
     ClientLeave = 102,
     PlayerMove = 109,
@@ -215,6 +259,7 @@ generate_enum!(
     LPChanged = 150,
     DirectCTOS = 201,
     DirectSTOC = 202,
+    ServerMessage = 203,
     ProviderTerminate = 254,
     Terminate = 255
 );

@@ -39,6 +39,10 @@ pub struct Configuration {
     pub check_room_name: bool,
     #[config(default = "true")]
     pub check_player_name: bool,
+    #[config(default = "0")]
+    pub max_length: usize,
+    #[config(default = "Strategy::Warn")]
+    pub length_strategy: Strategy,
     pub groups: Groups,
 }
 
@@ -83,6 +87,20 @@ pub enum Strategy {
     Kick,
 }
 
+impl FromStr for Strategy {
+    type Err = ();
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(match value.to_ascii_lowercase().as_str() {
+            "block" => Strategy::Block,
+            "warn" => Strategy::Warn,
+            "echo" => Strategy::Echo,
+            "kick" => Strategy::Kick,
+            _ => return Err(()),
+        })
+    }
+}
+
 impl Mul for Strategy {
     type Output = Strategy;
 
@@ -96,15 +114,21 @@ impl Mul for Strategy {
     }
 }
 
-fn check(text: &str, groups: &Groups) -> Option<Strategy> {
+fn check(text: &str, configuration: &Configuration) -> Option<Strategy> {
     let mut worst = None;
-    for group in groups.0.values() {
+    for group in configuration.groups.0.values() {
         if group.words.is_match(text) {
             worst = Some(match worst {
                 Some(current) => current * group.strategy,
                 None => group.strategy,
             });
         }
+    }
+    if configuration.max_length > 0 && text.chars().count() > configuration.max_length {
+        worst = Some(match worst {
+            Some(current) => current * configuration.length_strategy,
+            None => configuration.length_strategy,
+        });
     }
     worst
 }
@@ -114,7 +138,7 @@ fn check(text: &str, groups: &Groups) -> Option<Strategy> {
 fn on_player_info(player: &mut Player, player_info: &ctos::PlayerInfo) -> Option<&'static str> {
     let configuration = crate::configuration::get_configuration::<Configuration>()?;
     if !configuration.check_player_name { return None }
-    let strategy = check(&*player_info.name, &configuration.groups)?;
+    let strategy = check(&*player_info.name, &configuration)?;
     match strategy {
         Strategy::Warn => {
             player.send_message("昵称包含不当词汇，请及时修改", Color::Red);
@@ -132,7 +156,7 @@ fn on_player_info(player: &mut Player, player_info: &ctos::PlayerInfo) -> Option
 fn before_join_game(join_game: &ctos::JoinGame, stop: &mut StopFlag) -> Option<&'static str> {
     let configuration = crate::configuration::get_configuration::<Configuration>()?;
     if !configuration.check_room_name { return None }
-    check(&*join_game.pass, &configuration.groups)?;
+    check(&*join_game.pass, &configuration)?;
     stop.0 = true;
     Some("kick")
 }
@@ -140,7 +164,7 @@ fn before_join_game(join_game: &ctos::JoinGame, stop: &mut StopFlag) -> Option<&
 #[before(ctos::Chat)]
 #[register_to(CTOS_HANDLERS as ClientToServerHandler)]
 fn before_chat(room: &mut Room, index: usize, chat: &ctos::Chat, stop: &mut StopFlag, configuration: Configuration) -> Option<&'static str> {
-    let strategy = check(&*chat.msg, &configuration.groups)?;
+    let strategy = check(&*chat.msg, &configuration)?;
     stop.0 = true;
     match strategy {
         Strategy::Block => Some("cancel"),

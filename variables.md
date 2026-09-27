@@ -38,9 +38,15 @@ The entries are merged, in increasing priority, from:
 | `SRVPRO_AUTH_TOKEN_TTL_DAYS` | `180` | How long a login token stays valid |
 | `SRVPRO_BOOTSTRAP_USERNAME` | `admin` | The account created on the first start |
 | `SRVPRO_BOOTSTRAP_PASSWORD` | empty | The password of that account; a random one is generated and logged when empty |
+| `SRVPRO_ENABLE_PLUGINS` | empty | Comma-separated module names added to the enabled plugins at start |
+| `SRVPRO_DISABLE_PLUGINS` | empty | Comma-separated module names removed from the enabled plugins at start |
 | `SRVPRO_HTTP_SHOW_IP` | `true` | Show player addresses in the room list |
 | `SRVPRO_HTTP_SHOW_INFO` | `true` | Show per-player score, LP and hand size in the room list |
 | `SRVPRO_HTTP_PUBLIC_ROOMLIST` | `false` | Let unauthenticated callers read the room list |
+
+The two plugin lists are read before the `config` table is merged, so that table cannot override them. What the
+portal switches instead are `api_enabled_plugins` and `api_disabled_plugins`, the entries of that table it writes
+itself.
 
 ## Plugins
 
@@ -49,17 +55,29 @@ The entries are merged, in increasing priority, from:
 | `SRVPRO_BAD_WORDS_CHECK_ROOM_NAME` | `true` | Check room names |
 | `SRVPRO_BAD_WORDS_CHECK_PLAYER_NAME` | `true` | Check player names |
 | `SRVPRO_BAD_WORDS_GROUPS` | `{}` | `{"<group>": {"strategy": "block"\|"warn"\|"echo"\|"kick", "words": ["..."]}}`; prefer `groups` in `bad_words.yaml` |
+| `SRVPRO_BAD_WORDS_LENGTH_STRATEGY` | `warn` | Applied to a room name, a player name or a message that is too long |
+| `SRVPRO_BAD_WORDS_MAX_LENGTH` | `0` | Longest accepted text in characters; `0` accepts any length |
+| `SRVPRO_CLOUD_REPLAY_PROVIDER` | empty | `file` or `api`; the provider that plays `R` rooms back |
 | `SRVPRO_DECK_REPORT_URL` | empty | Where the deck report of a duel is posted |
 | `SRVPRO_DECK_REPORT_ACCESS_KEY` | empty | Bearer token sent to that report endpoint |
 | `SRVPRO_DECK_REPORT_ARENA` | empty | Arena name sent with the report |
 | `SRVPRO_DIALOGUES_ENABLED` | `true` | Play entry dialogues |
 | `SRVPRO_DIALOGUES_DIALOGUES` | `{}` | `{"<card code>": ["<line>", ...]}`; prefer `dialogues` in `dialogues.yaml` |
+| `SRVPRO_HAISUI_LP_LOW_MESSAGE_WHEN_DAMAGED` | 你的生命已经如风中残烛了！ | Sent when a damage leaves a player at 100 LP or less |
+| `SRVPRO_HAISUI_LP_LOW_MESSAGE_WHEN_PAID_COST` | 背水一战！ | Sent when paying a cost does the same |
 | `SRVPRO_HIDE_NAME_MODE` | `disabled` | Mask opponent names in random rooms; `disabled`, `start` or `always` |
+| `SRVPRO_MINILUV_JOIN_TIMEOUT` | `5` | Seconds a connection may stay before it joins a room; `0` disables the check |
+| `SRVPRO_MINILUV_MAX_CONNECTIONS_PER_IP` | `5` | Connections one address may hold at once; `0` disables the check |
 | `SRVPRO_RANDOM_MATCH_DEFAULT` | `S` | The mode used when the room field is empty |
 | `SRVPRO_RANDOM_MATCH_MODES` | `[]` | The modes a random room may be created with, e.g. `["S", "M", "T"]`; prefer `modes` in `random_match.yaml` |
+| `SRVPRO_RANDOM_MATCH_MIN_SURRENDER_TURN` | `3` | Turns within which a random room refuses surrender; `0` disables |
+| `SRVPRO_RANDOM_MATCH_READY_TIMEOUT` | `90` | Seconds a player in a random room has to ready up |
+| `SRVPRO_RANDOM_MATCH_START_TIMEOUT` | `20` | Seconds a filled random room waits before it starts |
+| `SRVPRO_RANDOM_MATCH_SURRENDER_LIMITED_MODES` | `["S","T"]` | The random room types that refusal applies to |
 | `SRVPRO_RECONNECT_WAIT_TIME` | `60` | Seconds a disconnected player has to come back |
 | `SRVPRO_RECONNECT_AUTO_SURRENDER_AFTER_DISCONNECT` | `false` | Surrender on the disconnected player's behalf |
 | `SRVPRO_RECONNECT_ALLOW_KICK_RECONNECT` | `false` | Let a reconnect take the seat of the player still in it |
+| `SRVPRO_RECOVER_PROVIDER` | empty | `file` or `api`; the provider that reads the replay of an `RC` room |
 | `SRVPRO_REPORT_URL` | empty | Where the result of a duel is posted |
 | `SRVPRO_REPORT_ACCESS_KEY` | empty | Bearer token sent to that report endpoint |
 | `SRVPRO_REPORT_ARENA` | empty | Arena name sent with the report |
@@ -71,6 +89,17 @@ The entries are merged, in increasing priority, from:
 | `SRVPRO_TIP_PREFIX` | `Tip: ` | Prefix of every tip line |
 | `SRVPRO_TIP_TIPS` | `[]` | The tip lines, e.g. `["...", "..."]`; prefer `tips` in `tip.yaml` |
 | `SRVPRO_WELCOME_MESSAGE` | a Chinese greeting | Sent to a player when they join; prefer `message` in `welcome.yaml` |
+
+`recover` and `cloud_replay` read a replay through a provider, and the providers keep entries of their own: the
+file providers take `SRVPRO_FILE_PATH` (default `replays`) and, for `cloud_replay`, `SRVPRO_FILE_MACHINE`
+(default `0`, the machine number a saved replay id is built from); the api providers take `SRVPRO_API_URL`
+(`{id}` in it is replaced by the replay id) and `SRVPRO_API_AUTH`, the `Authorization` header sent with the
+request. Both plugins share these four names, so one `file_path` sets the directory of both.
+
+Both plugins are off by default: nothing is recorded, and the `R` and `RC` rooms do not exist. Turning one on
+means enabling the plugin itself (`srvpro::plugin::cloud_replay`, `srvpro::plugin::recover`), enabling the
+provider it should use (`srvpro::plugin::cloud_replay::file`, `srvpro::plugin::recover::api`, ...), and naming
+that provider in the plugin's own `provider` entry.
 
 The `death` plugin reads no variable: its rule is fixed, and a death match is started through `/api/death`.
 

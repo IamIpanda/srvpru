@@ -81,16 +81,16 @@ pub struct Configuration {
     pub allow_kick_reconnect: bool,
 }
 
-struct DisconnectInfo {
-    name: String,
-    timeout: tokio::task::JoinHandle<()>,
+pub(crate) struct DisconnectInfo {
+    pub(crate) name: String,
+    pub(crate) timeout: tokio::task::JoinHandle<()>,
 }
 
 static RANDOM_ROOM_OF_CLIENT: LazyLock<Mutex<HashMap<String, String>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Attachment)]
-struct Disconnected {
-    slots: hashbrown::HashMap<usize, DisconnectInfo>,
+pub(crate) struct Disconnected {
+    pub(crate) slots: hashbrown::HashMap<usize, DisconnectInfo>,
 }
 
 #[derive(Clone)]
@@ -167,7 +167,7 @@ fn welcome_messages(room: &Room, states: &Anymap, position: usize) -> Vec<stoc::
     let netplayer = seat.and_then(|player| player.states.get::<Netplayer>()).copied().unwrap_or(Netplayer::Unknown);
     let host = seat.and_then(|player| player.states.get::<bool>()).copied().unwrap_or(false);
     let mut messages = vec![
-        stoc::Message::from(stoc::Chat { player: Color::Babyblue.into(), msg: "你有未完成的对局，即将重新连接，请选择你在本局决斗中使用的卡组并准备。".into() }),
+        stoc::Message::from(stoc::Chat { player: Color::Babyblue.into(), msg: "[Server]: 你有未完成的对局，即将重新连接，请选择你在本局决斗中使用的卡组并准备。".into() }),
         stoc::Message::from(stoc::JoinGame { info: hostinfo }),
         stoc::Message::from(stoc::TypeChange { player: netplayer, host }),
     ];
@@ -184,7 +184,7 @@ fn check_deck(room: &Room, states: &Anymap, key: &str, position: usize, kick: bo
     if origin_name(player).as_deref() != Some(key) { return DeckCheck::Lost }
     let Some(duel_deck) = player.states.get::<Vec<Deck>>().and_then(|decks| decks.first()) else { return DeckCheck::Lost };
     if !kick && !states.get::<Disconnected>().map(|disconnected| disconnected.slots.contains_key(&position)).unwrap_or(false) { return DeckCheck::Lost }
-    if duel_deck != deck { return DeckCheck::Incorrect }
+    if duel_deck.get_hash() != deck.get_hash() { return DeckCheck::Incorrect }
     DeckCheck::Accepted
 }
 
@@ -193,7 +193,7 @@ fn send_deck_incorrect(player: &mut Player, position: usize) {
     deck_error.set_error_type(DeckErrorType::NotAvailable);
     let status = PlayerChange::new().with_state(PlayerChangeState::Notready).with_player(Netplayer::Player(position as u8));
     let messages = vec![
-        stoc::Message::from(stoc::Chat { player: Color::Red.into(), msg: "卡组与断线前不一致，请使用原卡组重连。".into() }),
+        stoc::Message::from(stoc::Chat { player: Color::Red.into(), msg: "[Server]: 卡组与断线前不一致，请使用原卡组重连。".into() }),
         stoc::Message::from(stoc::HsPlayerChange { status }),
         stoc::Message::from(stoc::ErrorMessage { err: ErrorMessage::DeckError(deck_error) }),
     ];
@@ -250,7 +250,7 @@ fn before_client_leave(room: &mut Room, client_leave: &mut srvpro::ClientLeave, 
 
 #[before(ctos::JoinGame, priority = 16)]
 #[register_to(CTOS_PREHANDLERS as ClientToServerPrecursorHandler)]
-async fn before_join_game(player: &mut Player, join_game: &ctos::JoinGame, stop: &mut StopFlag) -> &'static str {
+pub(crate) async fn before_join_game(player: &mut Player, join_game: &ctos::JoinGame, stop: &mut StopFlag) -> &'static str {
     let Some(origin_name) = origin_name(player) else { return "continue" };
     let room_name = random_room_of(player).unwrap_or_else(|| join_game.pass.to_string());
     let Some(room_sender) = room_sender(&room_name) else { return "continue" };
@@ -308,7 +308,7 @@ fn before_player_join(room: &mut Room, player_join: &mut srvpro::PlayerJoin, dis
     if let Some(info) = disconnected.slots.remove(&position) {
         info.timeout.abort();
     } else if kick {
-        room.send(Request::STOC(Complex::from_message(stoc::Chat { player: Color::Red.into(), msg: "你的对局已被同一玩家的新连接顶替。".into() }.into()), position));
+        room.players[position].send_message("你的对局已被同一玩家的新连接顶替。", Color::Red);
     }
     let (seat_sink, old_states) = {
         let old_player = &mut room.players[position];

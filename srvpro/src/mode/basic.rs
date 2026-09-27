@@ -1,4 +1,3 @@
-use linkme::distributed_slice;
 use ygopro::duel::SendTarget;
 use ygopro_data::constants::*;
 use ygopro_derive::handler;

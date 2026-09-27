@@ -3,7 +3,6 @@ use futures::StreamExt;
 
 use ygopro_data::constants::Color;
 use ygopro_data::message::ctos;
-use ygopro_handler::extract::Response;
 use ygopro_handler::RoomProvider;
 
 use crate::message as srvpro;
@@ -16,6 +15,9 @@ type Anymap = anymap3::Map<dyn std::any::Any + Send>;
 #[register_to(CTOS_PREHANDLERS as ClientToServerPrecursorHandler)]
 async fn on_join_game_precursor(states: &mut Anymap, join_game: &ctos::JoinGame) {
     if states.get::<srvpro::PlayerMove>().is_some() { return; }
+    // We refuse empty here just for stop creating empty password room.
+    // Later or before, other handler may put player move in.
+    if join_game.pass.trim().is_empty() { return }
     let room_name = join_game.pass.to_string();
     let exists = ROOMS.read().contains_key(&room_name);
     if ! exists { 
@@ -23,6 +25,14 @@ async fn on_join_game_precursor(states: &mut Anymap, join_game: &ctos::JoinGame)
         debug!("Room {} allocated.", room_name);
     }
     states.insert(srvpro::PlayerMove { room_name });
+}
+
+#[handler(ctos::JoinGame, priority = 250, module = "srvpro::core")]
+#[register_to(CTOS_PREHANDLERS as ClientToServerPrecursorHandler)]
+fn refuse_blank_room_name(player: &mut Player, join_game: &ctos::JoinGame) {
+    if player.states.get::<srvpro::PlayerMove>().is_none() && join_game.pass.trim().is_empty() {
+        player.send_message("房间名不能为空。", Color::Red);
+    }
 }
 
 #[handler(srvpro::PlayerJoin, module = "srvpro::core")]
@@ -84,12 +94,6 @@ async fn on_join_game(room: &mut Room, player: usize) {
             request_sender.unbounded_send(Request::STOC(message, player)).ok();
         }
     });
-}
-
-#[handler(srvpro::ClientRefused, module = "srvpro::core")]
-#[register_to(crate::SRVPRO_GLOBAL_HANDLERS as crate::GlobalHandler)]
-async fn on_client_refused() -> Response<srvpro::Message> {
-    Response::Kick
 }
 
 #[handler(srvpro::ProviderTerminate, module = "srvpro::core")]

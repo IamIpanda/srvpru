@@ -12,7 +12,8 @@ srvpro = { path = "../srvpro", default-features = false }
 srvpro-api = { path = "../srvpro-api", optional = true }
 
 [features]
-default = ["api", "zip", "card"]
+default = ["api", "zip", "card", "forge"]
 api = ["dep:srvpro-api"]
 zip = ["srvpro/zip"]
 card = ["srvpro/card"]
+forge = ["srvpro/forge"]

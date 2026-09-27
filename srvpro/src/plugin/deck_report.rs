@@ -1,6 +1,10 @@
 //! Post each player's deck at duel start, mirroring the original srvpro's
 //! deck_log module.
 
+// TODO: srvpro derives the arena per room (arena name, otherwise tag / entertain /
+// athletic / custom) and can also persist each deck to deck_log.local as a .ydk
+// file; here the arena is the configured constant and nothing is written to disk.
+
 use std::time::Duration;
 
 use ygopro_data::data::Deck;

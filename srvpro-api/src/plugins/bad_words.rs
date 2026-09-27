@@ -6,7 +6,6 @@ use axum::Json;
 use axum::Router;
 use axum::http::StatusCode;
 use axum::routing::post;
-use linkme::distributed_slice;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -16,8 +15,7 @@ use crate::register_router;
 use srvpro::configuration;
 use srvpro::managers::config_manager;
 
-#[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
-pub static NAME: &'static str = module_path!();
+pub static NAME: &'static str = srvpro::plugin::bad_words::NAME;
 
 register_router!(BAD_WORDS_ROUTER, build_bad_words_router);
 

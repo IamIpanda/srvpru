@@ -2,3 +2,5 @@ default: S
 modes:
 - S
 - M
+ready_timeout: 90
+start_timeout: 20

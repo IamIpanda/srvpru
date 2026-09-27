@@ -30,9 +30,9 @@ COPY srvpro-api ./srvpro-api
 COPY srvpro-app ./srvpro-app
 
 RUN if [ "$WITH_API" = "true" ]; then \
-      FEATURES=api,zip,card; \
+      FEATURES=api,zip,card,forge; \
     else \
-      FEATURES=zip,card; \
+      FEATURES=zip,card,forge; \
     fi \
     && cargo build --release --target x86_64-unknown-linux-musl -p srvpro-app --no-default-features --features "$FEATURES"
 

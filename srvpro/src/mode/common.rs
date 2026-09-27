@@ -1,6 +1,9 @@
-use linkme::distributed_slice;
+use ygopro_data::constants::MasterRule;
+use ygopro_data::constants::Mode;
+use ygopro_data::constants::Rule;
 use ygopro_derive::handler;
 use ygopro_derive::register_to;
+use ygopro_handler::All;
 
 use crate::mode::MODES;
 use crate::mode::ModeHandler as Handler;
@@ -25,6 +28,31 @@ fn genesys(config: &mut RoomConfiguration, part: &str) -> bool {
         }
         true
     } else { false }
+}
+
+#[handler(All, module = "srvpro::mode::common")]
+#[register_to(MODES)]
+fn legacy(config: &mut RoomConfiguration, name: &str) -> bool {
+    let Some((head, numbers)) = name.split_at_checked(5) else { return false };
+    let mut head = head.chars();
+    let (Some(rule), Some(mode), Some(duel_rule), Some(no_check_deck), Some(no_shuffle_deck)) = (head.next(), head.next(), head.next(), head.next(), head.next()) else { return false };
+    let Some(rule) = rule.to_digit(10).and_then(|value| Rule::try_from(value as u8).ok()) else { return false };
+    let Some(mode) = mode.to_digit(10).and_then(|value| Mode::try_from(value as u8).ok()) else { return false };
+    let duel_rule = match duel_rule { 'T' => Some(3), 'F' => Some(5), other => other.to_digit(10) };
+    let Some(duel_rule) = duel_rule.and_then(|value| MasterRule::try_from(value as u8).ok()) else { return false };
+    if !matches!(no_check_deck, 'T' | 'F') || !matches!(no_shuffle_deck, 'T' | 'F') { return false }
+    let Some((start_lp, rest)) = numbers.split_once(',') else { return false };
+    let Some((start_hand, draw_count)) = rest.split_once(',') else { return false };
+    let (Ok(start_lp), Ok(start_hand), Ok(draw_count)) = (start_lp.parse::<u32>(), start_hand.parse::<u8>(), draw_count.parse::<u8>()) else { return false };
+    config.hostinfo.rule = rule;
+    config.hostinfo.mode = mode;
+    config.hostinfo.duel_rule = duel_rule;
+    config.hostinfo.no_check_deck = no_check_deck == 'T';
+    config.hostinfo.no_shuffle_deck = no_shuffle_deck == 'T';
+    config.hostinfo.start_lp = start_lp;
+    config.hostinfo.start_hand = start_hand;
+    config.hostinfo.draw_count = draw_count;
+    true
 }
 
 mod no_watch {

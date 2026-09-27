@@ -7,7 +7,6 @@ use axum::Router;
 use axum::extract::Query;
 use axum::http::StatusCode;
 use axum::routing::get;
-use linkme::distributed_slice;
 use rusqlite::Connection;
 use serde::Deserialize;
 use serde::Serialize;
@@ -24,6 +23,8 @@ pub static NAME: &'static str = module_path!();
 register_router!(CONFIG_ROUTER, build_config_router);
 
 const PERMISSION: &str = "change_settings";
+const API_ENABLED_PLUGINS_KEY: &str = "api_enabled_plugins";
+const API_DISABLED_PLUGINS_KEY: &str = "api_disabled_plugins";
 
 #[derive(Deserialize)]
 struct ConfigsQuery {
@@ -64,13 +65,10 @@ async fn get_configs(Query(query): Query<ConfigsQuery>) -> Json<BTreeMap<String,
 }
 
 async fn set_config(Json(request): Json<SetConfigRequest>) -> Result<Json<SetConfigResult>, StatusCode> {
-    if let Some(connection) = database::CONNECTION.lock().as_mut() {
-        if let Err(error) = write(connection, &request.key, &request.value) {
-            log::error!("cannot write config table: {error}");
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        }
+    if let Err(error) = set(&request.key, &request.value) {
+        log::error!("cannot write config table: {error}");
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
-    config_manager::update(vec![(request.key.clone(), request.value.clone())]);
     Ok(Json(SetConfigResult { message: "set config ok".to_string(), key: request.key, value: request.value }))
 }
 
@@ -89,10 +87,12 @@ pub fn directory() -> std::path::PathBuf {
     std::env::var("SRVPRO_CONFIG_PATH").unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../srvpro/config").to_string()).into()
 }
 
-#[handler(srvpro::message::Init, priority = 11)]
+#[handler(srvpro::message::Init, priority = 20)]
 #[register_to(srvpro::SRVPRO_GLOBAL_HANDLERS as srvpro::GlobalHandler)]
-fn on_init() {
-    let Some(database) = configuration::get_configuration::<crate::Configuration>().map(|configuration| configuration.database) else { return };
+fn on_init(init: &mut srvpro::message::Init) {
+    let mut configurations = anymap3::Map::<dyn anymap3::CloneAny + Send + Sync>::new();
+    crate::Configuration::default_configuration(&mut configurations).ok();
+    let Some(database) = configurations.remove::<crate::Configuration>().map(|configuration| configuration.database) else { return };
     if database.is_empty() { return }
     let connection = match Connection::open(&database) {
         Ok(connection) => connection,
@@ -102,7 +102,12 @@ fn on_init() {
         }
     };
     match read(&connection) {
-        Ok(entries) => config_manager::update(entries),
+        Ok(entries) => {
+            let enabled = entries.iter().find(|(key, _)| key.as_str() == API_ENABLED_PLUGINS_KEY).map(|(_, value)| value.as_str());
+            let disabled = entries.iter().find(|(key, _)| key.as_str() == API_DISABLED_PLUGINS_KEY).map(|(_, value)| value.as_str());
+            configuration::apply_plugin_lists(init, enabled, disabled);
+            config_manager::update(entries);
+        }
         Err(error) => log::warn!("cannot read config table from {database}: {error}"),
     }
     *database::CONNECTION.lock() = Some(connection);
@@ -126,4 +131,25 @@ fn write(connection: &Connection, key: &str, value: &str) -> rusqlite::Result<()
 fn remove(connection: &Connection, key: &str) -> rusqlite::Result<()> {
     connection.execute("DELETE FROM config WHERE key = ?1", rusqlite::params![key])?;
     Ok(())
+}
+
+pub(crate) fn set(key: &str, value: &str) -> rusqlite::Result<()> {
+    if let Some(connection) = database::CONNECTION.lock().as_mut() {
+        write(connection, key, value)?;
+    }
+    config_manager::update(vec![(key.to_string(), value.to_string())]);
+    Ok(())
+}
+
+pub(crate) fn set_plugin_enabled(plugin_name: &str, enabled: bool) {
+    for (key, matched) in [(API_ENABLED_PLUGINS_KEY, enabled), (API_DISABLED_PLUGINS_KEY, !enabled)] {
+        let value = {
+            let current = config_manager::load();
+            let mut list = current.get(key).unwrap_or_default().split(',').map(str::trim).filter(|name| !name.is_empty()).collect::<Vec<_>>();
+            list.retain(|name| *name != plugin_name);
+            if matched { list.push(plugin_name) }
+            list.join(",")
+        };
+        if let Err(error) = set(key, &value) { log::error!("cannot write config table: {error}"); }
+    }
 }

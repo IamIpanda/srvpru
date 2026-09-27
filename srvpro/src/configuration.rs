@@ -5,23 +5,13 @@ use arc_swap::ArcSwap;
 
 use crate::message as srvpro;
 
+pub const ENABLE_PLUGINS_KEY: &str = "enable_plugins";
+pub const DISABLE_PLUGINS_KEY: &str = "disable_plugins";
+
 #[derive(Clone)]
 pub struct Configuration {
     pub enable_plugins: hashbrown::HashSet<String>,
     pub configurations: anymap3::Map<dyn anymap3::CloneAny + Send + Sync>,
-}
-
-impl Default for Configuration {
-    fn default() -> Self {
-        let mut configuration = Self {
-            enable_plugins: hashbrown::HashSet::new(),
-            configurations: anymap3::Map::new(),
-        };
-        for plugin_name in crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS {
-            configuration.enable_plugin(plugin_name);
-        }
-        configuration
-    }
 }
 
 impl Configuration {
@@ -30,6 +20,14 @@ impl Configuration {
             enable_plugins: Default::default(),
             configurations: Default::default(),
         }
+    }
+
+    pub fn resolve(enable_plugins: hashbrown::HashSet<String>) -> Self {
+        let mut configuration = Self::empty();
+        for plugin_name in enable_plugins {
+            configuration.enable_plugin(&plugin_name);
+        }
+        configuration
     }
 
     fn init_plugin(&mut self, plugin_name: &str) {
@@ -68,7 +66,18 @@ impl Configuration {
     }
 }
 
-static CONFIGURATION: LazyLock<ArcSwap<Configuration>> = LazyLock::new(|| ArcSwap::from_pointee(Configuration::default()));
+pub fn apply_plugin_lists(init: &mut srvpro::Init, enable_plugins: Option<&str>, disable_plugins: Option<&str>) {
+    if let Some(list) = enable_plugins {
+        init.enable_plugins.extend(list.split(',').map(str::trim).filter(|plugin_name| !plugin_name.is_empty()).map(ToString::to_string));
+    }
+    if let Some(list) = disable_plugins {
+        for plugin_name in list.split(',').map(str::trim).filter(|plugin_name| !plugin_name.is_empty()) {
+            init.enable_plugins.remove(plugin_name);
+        }
+    }
+}
+
+static CONFIGURATION: LazyLock<ArcSwap<Configuration>> = LazyLock::new(|| ArcSwap::from_pointee(Configuration::empty()));
 
 pub fn get() -> Arc<Configuration> {
     CONFIGURATION.load_full()
@@ -80,7 +89,8 @@ pub fn get_configuration<T: Clone + Send + Sync + 'static>() -> Option<T> {
 
 #[handler(srvpro::Init)]
 #[register_to(crate::SRVPRO_GLOBAL_HANDLERS as crate::GlobalHandler)]
-async fn on_init() {
+async fn on_init(init: &srvpro::Init) {
+    CONFIGURATION.store(Arc::new(Configuration::resolve(init.enable_plugins.clone())));
     for module_name in get().enable_plugins.iter() {
         crate::process(srvpro::PluginEnabled { module_name: module_name.clone() }.into_message()).await;
     }

@@ -53,12 +53,13 @@ npm ci
 npm run build # → srvpro-portal/dist
 ```
 
-`srvpro-app` 默认开启 `api`、`zip`、`card` 三个 feature。用 `--no-default-features --features zip,card`
-编译可以得到一个不带 HTTP API 与后台的纯服务端。
+`srvpro-app` 默认开启 `api`、`zip`、`card`、`forge` 四个 feature。用
+`--no-default-features --features zip,card,forge` 编译可以得到一个不带 HTTP API 与后台的纯服务端。
 
 ## 运行
 
-预编译镜像已发布在 Docker Hub 上：`iami/srvpru`。先把数据放到旁边：
+预编译镜像已发布在 Docker Hub 上：`iami/srvpru`（除 ygopro 协议外还提供 HTTP API 与后台）与
+`iami/srvpru:headless`（只提供 ygopro 协议）。先把数据放到旁边：
 
 ```bash
 git clone --depth 1 https://github.com/mycard/ygopro-database
@@ -102,8 +103,8 @@ no initial password is configured, created the account admin in srvpro.db with t
 例如 `T,BO3#xxxx` 会建立一个三局两胜的双打房，其中 `xxxx` 是任意合法房间名。
 
 `#` 之前的部分按逗号拆开当作代码，无法识别的代码会被直接忽略。玩家输入的那串字符串本身就是房间标识：房间在
-第一次加入时创建，之后加入的人都必须输入一模一样的字符串。`#` 之后的房间名里如果出现 `$`，`$` 之后的部分就是
-密码：后台会把该房间标记为需要密码，而提供给匿名访问者的房间列表会隐藏 `$` 之后的内容。
+第一次加入时创建，之后加入的人都必须输入一模一样的字符串。`#` 之后的字符串里如果出现 `$`，`$` 之后的部分就是
+密码：整串仍然算作房间标识，而房间列表只显示 `$` 之前的部分。
 
 ## 配置
 

@@ -3,7 +3,6 @@ use axum::Router;
 use axum::extract::Query;
 use axum::http::StatusCode;
 use axum::routing::get;
-use linkme::distributed_slice;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -12,8 +11,7 @@ use crate::register_router;
 use srvpro::room::Request;
 use srvpro::room::ROOMS;
 
-#[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
-pub static NAME: &'static str = module_path!();
+pub static NAME: &'static str = srvpro::plugin::death::NAME;
 
 register_router!(DEATH_ROUTER, build_death_router);
 

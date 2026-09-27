@@ -12,6 +12,8 @@ hashbrown = { version = "0.17", features = ["serde"] }
 chrono = { version = "0.4", features = ["clock"] }
 slab = "0.4.12"
 arc-swap = "1"
+# https://goals.rust-lang.org/2026/afidt-box.html
+async-trait = "0.1"
 base64 = "0.23"
 binrw = "0.13"
 bytes = "1"
@@ -29,12 +31,14 @@ aho-corasick = "1"
 ureq = "3.4.0"
 
 ygopro = { version = "0", default-features = false }
+ygopro-core-wrapper = { version = "0", default-features = false }
 ygopro-data = { version = "0", default-features = false }
 ygopro-derive = "0"
 ygopro-external-server-bridge = "0"
 ygopro-handler = { version = "0", default-features = false }
 
 [features]
-default = ["zip", "card"]
+default = ["zip", "card", "forge"]
 zip = ["ygopro/zip"]
 card = ["ygopro/card"]
+forge = ["ygopro/forge"]

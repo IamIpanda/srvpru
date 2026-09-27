@@ -8,8 +8,6 @@ use std::ops::DerefMut;
 use std::pin::Pin;
 use std::sync::LazyLock;
 
-use linkme::distributed_slice;
-
 use ygopro::host::DuelHost;
 use ygopro_data::complex::Complex;
 use ygopro_data::constants::Netplayer;

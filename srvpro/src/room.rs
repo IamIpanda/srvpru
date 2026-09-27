@@ -8,7 +8,6 @@ use futures::Stream;
 use futures::StreamExt;
 use futures::channel::mpsc;
 use hashbrown::HashMap;
-use linkme::distributed_slice;
 use log::warn;
 use parking_lot::RwLock;
 use slab::Slab;
@@ -125,9 +124,19 @@ impl Player {
 
     pub fn run<S: Stream<Item = Complex<ctos::Message>> + Unpin + Send + 'static>(self, mut client_to_server_stream_from_network: S) {
         let processor = CTOS_PREPROCESSOR.load_full();
-        let mut player = self;
         tokio::spawn(async move {
-            while let Some(message) = client_to_server_stream_from_network.next().await {
+            let mut player = self;
+            let (client_to_server_sink_towards_preprocessor, mut client_to_server_stream_towards_preprocessor) = mpsc::unbounded();
+            player.states.insert(client_to_server_sink_towards_preprocessor);
+            let bundle = crate::process(srvpro::ClientConnect { player }.into_message()).await;
+            let srvpro::Message::ClientConnect(srvpro::ClientConnect { mut player }) = bundle.request else { return }; // Handler can replace the request message, eat the player. That's acceptable.
+            if matches!(bundle.response, Response::Kick | Response::Terminate) { return }
+            loop {
+                let message = tokio::select! {
+                    message = client_to_server_stream_from_network.next() => message,
+                    message = client_to_server_stream_towards_preprocessor.next() => message,
+                };
+                let Some(message) = message else { break };
                 let key = message.message_key();
                 let bundle = Bundle::new(message, player, Default::default());
                 let Bundle { request, state, response, stop_flag: _ } = processor.process_bundle(bundle, key).await;
@@ -137,18 +146,21 @@ impl Player {
                     Response::Replace(message) => {player.client_to_server_sink_towards_provider.unbounded_send(Complex::from_message(message)).ok();} ,
                     Response::ReplaceMultiple(messages) => messages.into_iter().for_each(|message| { player.client_to_server_sink_towards_provider.unbounded_send(Complex::from_message(message)).ok(); }),
                     Response::Swallow => {},
-                    Response::Terminate | Response::Kick => { break; }
+                    Response::Terminate | Response::Kick => {
+                        crate::process(srvpro::ClientRefused.into_message()).await;
+                        break;
+                    }
                 };
                 if let Some(player_move) = player.states.get::<srvpro::PlayerMove>() {
+                    let room_name = player_move.room_name.clone();
+                    player.states.remove::<mpsc::UnboundedSender<Complex<ctos::Message>>>();
                     let mut rooms  = ROOMS.write();
-                    if let Some(room) = rooms.get_mut(&player_move.room_name) {
+                    if let Some(room) = rooms.get_mut(&room_name) {
                         room.add_player(player, client_to_server_stream_from_network);
                     } else {
-                        warn!("can't find room named {}, player will be dropped.", player_move.room_name)
+                        warn!("can't find room named {}, player will be dropped.", room_name)
                     };
                     break
-                } else {
-                    crate::process(srvpro::ClientRefused.into_message()).await;
                 }
             }
         });
@@ -157,7 +169,7 @@ impl Player {
     pub fn send_message(&self, message: &str, color: Color) {
         self.server_to_client_sink_towards_network.unbounded_send(Complex::from_message(stoc::Chat {
             player: color.into(),
-            msg: ("[Server]: ".to_string() + message).into(),
+            msg: format!("[Server]: {message}").into(),
         }.into())).ok();
     }
 }
@@ -372,8 +384,18 @@ impl Room {
     pub fn broadcast_message(&self, color: Color, message: &str) {
         self.broadcast(stoc::Chat {
             player: color.into(),
-            msg: ("[Server]: ".to_string() + message).into(),
+            msg: format!("[Server]: {message}").into(),
         }.into());
+    }
+}
+
+#[handler(srvpro::ServerMessage, module = "srvpro::core")]
+#[register_to(SRVPRO_HANDLERS as SrvproMessageHandler)]
+fn on_server_message(room: &mut Room, server_message: &srvpro::ServerMessage) {
+    let chat = stoc::Chat { player: server_message.color.into(), msg: format!("[Server]: {}", server_message.message).into() };
+    match server_message.target {
+        Some(index) => room.send(Request::STOC(Complex::from_message(chat.into()), index)),
+        None => room.broadcast(chat.into()),
     }
 }
 
@@ -396,6 +418,12 @@ fn on_direct_stoc(room: &mut Room, direct_stoc: &srvpro::DirectSTOC) {
         Some(index) => room.send(Request::STOC(Complex::from_message(direct_stoc.message.clone()), index)),
         None => room.broadcast(direct_stoc.message.clone())
     }
+}
+
+#[handler(ctos::LeaveGame, module = "srvpro::core")]
+#[register_to(CTOS_PREHANDLERS as ClientToServerPrecursorHandler)]
+fn on_leave_game_precursor() -> &'static str {
+    "kick"
 }
 
 #[handler(stoc::GameMessage, module = "srvpro::core")]

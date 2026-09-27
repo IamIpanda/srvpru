@@ -29,9 +29,9 @@ pub static GLOBAL_PROCESSOR: LazyLock<Processor<u8, srvpro::Message, (), Respons
     Processor::new_with_groups(&SRVPRO_GLOBAL_HANDLERS, &hashbrown::HashSet::new(), |handler| handler.module_name, |key| *key == 0)
 });
 
-pub async fn process(event: srvpro::Message) -> Response<srvpro::Message> {
+pub async fn process(event: srvpro::Message) -> Bundle<srvpro::Message, (), Response<srvpro::Message>> {
     let key = event.message_key();
-    GLOBAL_PROCESSOR.process_bundle(Bundle::new(event, (), Response::Continue), key).await.response
+    GLOBAL_PROCESSOR.process_bundle(Bundle::new(event, (), Response::Continue), key).await
 }
 
 #[handler(srvpro::Init)]

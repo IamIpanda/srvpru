@@ -1,5 +1,3 @@
-use linkme::distributed_slice;
-
 use ygopro_derive::*;
 use ygopro_data::message::stoc;
 

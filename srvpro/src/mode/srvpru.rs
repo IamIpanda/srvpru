@@ -1,4 +1,3 @@
-use linkme::distributed_slice;
 use ygopro_derive::handler;
 use ygopro_derive::register_to;
 

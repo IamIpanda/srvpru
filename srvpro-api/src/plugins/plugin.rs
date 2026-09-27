@@ -4,7 +4,6 @@ use axum::Json;
 use axum::Router;
 use axum::routing::get;
 use axum::routing::post;
-use linkme::distributed_slice;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -50,6 +49,7 @@ async fn get_plugins() -> Json<PluginsResult> {
 async fn enable_plugin(Json(request): Json<PluginsRequest>) -> Json<PluginResult> {
     for plugin in &request.plugins {
         configuration::enable(plugin).await;
+        crate::config::set_plugin_enabled(plugin, true);
     }
     Json(PluginResult { message: "enable ok".to_string(), plugins: request.plugins })
 }
@@ -57,6 +57,7 @@ async fn enable_plugin(Json(request): Json<PluginsRequest>) -> Json<PluginResult
 async fn disable_plugin(Json(request): Json<PluginsRequest>) -> Json<PluginResult> {
     for plugin in &request.plugins {
         configuration::disable(plugin).await;
+        crate::config::set_plugin_enabled(plugin, false);
     }
     Json(PluginResult { message: "disable ok".to_string(), plugins: request.plugins })
 }

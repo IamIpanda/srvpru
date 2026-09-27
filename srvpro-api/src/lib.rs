@@ -12,18 +12,10 @@ use tower_http::services::ServeFile;
 use ygopro_derive::Configuration;
 
 pub mod auth;
-pub mod bad_words;
 pub mod bootstrap;
 pub mod config;
 pub mod database;
-pub mod death;
-pub mod dialogues;
-pub mod plugin;
-pub mod roomlist;
-pub mod shout;
-pub mod stop;
-pub mod user;
-pub mod welcome;
+pub mod plugins;
 
 #[macro_use]
 extern crate ygopro_derive;
@@ -98,6 +90,6 @@ async fn dispatch(request: Request) -> Response {
 macro_rules! register_router {
     ($name:ident, $build:path) => {
         #[::linkme::distributed_slice($crate::SRVPRO_API_ROUTERS)]
-        static $name: (&'static str, fn() -> ::axum::Router) = (module_path!(), $build);
+        static $name: (&'static str, fn() -> ::axum::Router) = (NAME, $build);
     };
 }

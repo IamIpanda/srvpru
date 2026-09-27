@@ -10,16 +10,18 @@ mod hide_name;
 mod report;
 mod deck_report;
 pub mod bad_words;
+pub mod cloud_replay;
+pub mod recover;
 mod retry_handle;
 mod chat_color;
-mod death;
+pub mod death;
+mod miniluv;
 mod reconnect;
 mod side_timeout;
 mod soumatou;
 pub mod stop;
 pub mod base;
-
-use linkme::distributed_slice;
+mod haisui;
 
 #[distributed_slice]
 pub static SRVPRO_DEFAULT_ENABLED_PLUGINS: [&'static str];

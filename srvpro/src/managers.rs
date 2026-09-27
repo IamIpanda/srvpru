@@ -109,8 +109,10 @@ pub mod config_manager {
 
     #[handler(crate::message::Init, priority = 10)]
     #[register_to(crate::SRVPRO_GLOBAL_HANDLERS as crate::GlobalHandler)]
-    fn on_init() {
+    fn on_init(init: &mut crate::message::Init) {
         CONFIG_MANAGER.store(Arc::new(ConfigManager::new()));
+        let config_manager = CONFIG_MANAGER.load();
+        crate::configuration::apply_plugin_lists(init, config_manager.get(crate::configuration::ENABLE_PLUGINS_KEY), config_manager.get(crate::configuration::DISABLE_PLUGINS_KEY));
     }
 
     pub fn load() -> arc_swap::Guard<Arc<ConfigManager>> {

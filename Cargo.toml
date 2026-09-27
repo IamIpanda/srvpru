@@ -6,3 +6,11 @@ resolver = "2"
 lto = true
 strip = true
 opt-level = 'z'
+
+# [patch.crates-io]
+# ygopro = { path = "../ygopru/ygopro" }
+# ygopro-core-wrapper = { path = "../ygopru/ygopro-core-wrapper" }
+# ygopro-data = { path = "../ygopru/ygopro-data" }
+# ygopro-derive = { path = "../ygopru/ygopro-derive" }
+# ygopro-external-server-bridge = { path = "../ygopru/ygopro-external-server-bridge" }
+# ygopro-handler = { path = "../ygopru/ygopro-handler" }

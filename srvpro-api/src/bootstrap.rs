@@ -6,8 +6,6 @@ use rand::distributions::Alphanumeric;
 use rusqlite::Connection;
 use ygopro_derive::Configuration;
 
-use srvpro::configuration;
-
 #[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 
@@ -20,16 +18,19 @@ pub struct Configuration {
 }
 
 const SCHEMA: &str = include_str!("init.sql");
-const PERMISSIONS: &str = "stop,shout,get_rooms,change_settings,manage_users";
+const PERMISSIONS: &str = "stop,shout,get_rooms,change_settings,manage_users,start_death";
 const SECRET_NAME: &str = "jwt";
 const SECRET_LENGTH: usize = 64;
 const PASSWORD_LENGTH: usize = 64;
 
-#[handler(srvpro::message::Init, priority = 20)]
+#[handler(srvpro::message::Init, priority = 15)]
 #[register_to(srvpro::SRVPRO_GLOBAL_HANDLERS as srvpro::GlobalHandler)]
 fn on_init() -> &'static str {
-    let database = configuration::get_configuration::<crate::Configuration>().expect("srvpro-api configuration is not registered").database;
-    let initial = configuration::get_configuration::<Configuration>().expect("account bootstrap configuration is not registered");
+    let mut configurations = anymap3::Map::<dyn anymap3::CloneAny + Send + Sync>::new();
+    crate::Configuration::default_configuration(&mut configurations).ok();
+    Configuration::default_configuration(&mut configurations).ok();
+    let Some(database) = configurations.remove::<crate::Configuration>().map(|configuration| configuration.database) else { return "terminate" };
+    let Some(initial) = configurations.remove::<Configuration>() else { return "terminate" };
     if database.is_empty() {
         log::error!("srvpro database is not configured");
         return "terminate";

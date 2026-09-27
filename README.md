@@ -62,12 +62,15 @@ npm ci
 npm run build # → srvpro-portal/dist
 ```
 
-`srvpro-app` enables `api`, `zip` and `card` by default. Building it with
-`--no-default-features --features zip,card` produces a headless server without the HTTP API and the portal.
+`srvpro-app` enables `api`, `zip`, `card` and `forge` by default. Building it with
+`--no-default-features --features zip,card,forge` produces a headless server without the HTTP API and the
+portal.
 
 ## Running
 
-A prebuilt image is published on Docker Hub as `iami/srvpru`. Fetch the data next to it first:
+Prebuilt images are published on Docker Hub: `iami/srvpru`, which serves the HTTP API and the portal in
+addition to the ygopro protocol, and `iami/srvpru:headless`, which serves the ygopro protocol alone. Fetch the
+data first:
 
 ```bash
 git clone --depth 1 https://github.com/mycard/ygopro-database
@@ -114,8 +117,8 @@ For example, `T,BO3#xxxx` creates a tag room, best of three, where `xxxx` is any
 
 Everything before the `#` is read as comma-separated codes, and a code that is not recognised is ignored. What a
 player types is the room key itself: the room is created on the first join, and everyone who joins must type the
-same string. A `$` after the `#` separates the name from a password — the portal flags such a room as password
-protected, and room lists served to anonymous viewers hide what follows the `$`.
+same string. A `$` after the `#` separates the name from a password: the whole string stays the room key, and
+the room list shows only the part before the `$`.
 
 ## Configuration
 

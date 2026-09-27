@@ -3,7 +3,6 @@ use std::sync::LazyLock;
 
 use futures::SinkExt;
 use futures::StreamExt;
-use linkme::distributed_slice;
 use tokio_util::codec::FramedRead;
 use tokio_util::codec::FramedWrite;
 use tokio_util::codec::LengthDelimitedCodec;

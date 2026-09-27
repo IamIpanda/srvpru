@@ -22,7 +22,6 @@ use axum::response::Response;
 use axum::routing::post;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use linkme::distributed_slice;
 use parking_lot::RwLock;
 use ring::hmac;
 use rusqlite::Connection;

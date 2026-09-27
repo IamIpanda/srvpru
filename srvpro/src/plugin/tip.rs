@@ -6,7 +6,6 @@ use std::time::Duration;
 use parking_lot::RwLock;
 use rand::seq::SliceRandom;
 use ygopro_data::constants::Color;
-use ygopro_data::message::stoc;
 use ygopro_derive::Configuration;
 use ygopro_derive::handler;
 use ygopro_derive::register_to;
@@ -25,8 +24,6 @@ pub static NAME: &'static str = module_path!();
 #[derive(Clone, Configuration)]
 #[config(sync)]
 pub struct Configuration {
-    #[config(default = "true")]
-    pub enabled: bool,
     #[config(default = "120000")]
     pub interval: u64,
     #[config(default = "String::from(\"Tip: \")")]
@@ -63,7 +60,6 @@ fn on_plugin_disabled(event: &srvpro::PluginDisabled) {
 
 fn start() {
     let Some(configuration) = crate::configuration::get_configuration::<Configuration>() else { return };
-    if !configuration.enabled { return }
     let mut timer = TIMER.write();
     if timer.is_some() { return }
     *timer = Some(tokio::spawn(async move {
@@ -71,10 +67,9 @@ fn start() {
         loop {
             interval.tick().await;
             let Some(message) = random_tip(&configuration) else { continue };
-            let chat = stoc::Chat { player: Color::Babyblue.into(), msg: message.into() };
             let rooms = ROOMS.read();
             for host in rooms.values() {
-                host.sender.unbounded_send(Request::Ex(srvpro::DirectSTOC { message: chat.clone().into(), target: None }.into(), 0)).ok();
+                host.sender.unbounded_send(Request::Ex(srvpro::ServerMessage { color: Color::Babyblue, message: message.clone(), target: None }.into(), 0)).ok();
             }
         }
     }));
