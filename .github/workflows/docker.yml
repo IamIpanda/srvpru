@@ -1,0 +1,51 @@
+name: Docker
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build-and-push:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: With API and portal
+            with_api: "true"
+            suffix: ""
+            alias: latest
+          - name: Headless
+            with_api: "false"
+            suffix: "-headless"
+            alias: headless
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract cargo version of the srvpro-app package
+        id: version
+        run: |
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "srvpro-app") | .version')
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: |
+            WITH_API=${{ matrix.with_api }}
+          tags: |
+            iami/srvpru:${{ steps.version.outputs.version }}${{ matrix.suffix }}
+            iami/srvpru:${{ matrix.alias }}
