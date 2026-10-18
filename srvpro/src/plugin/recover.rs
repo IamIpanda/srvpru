@@ -26,6 +26,9 @@ use ygopro_handler::StopFlag;
 
 use crate::message as srvpro;
 use crate::plugin::base::stage::Stage;
+use crate::plugin::pass_command::PassCommandArguments;
+use crate::plugin::pass_command::PassCommandHandler;
+use crate::plugin::pass_command::PASS_COMMANDS;
 use crate::plugin::register_dependencies;
 use crate::plugin::virtual_password::OriginName;
 use crate::mode::*;
@@ -37,6 +40,7 @@ register_dependencies!(crate::plugin::reconnect::NAME);
 
 #[async_trait]
 pub trait Recover: Send + Sync {
+    async fn list(&self, key: &str) -> Vec<String>;
     async fn recover(&self, id: &str) -> Option<Replay>;
 }
 
@@ -112,6 +116,16 @@ fn on_turn(config: &mut RoomConfiguration, part: &str) -> bool {
     let Some(request) = config.states.get_mut::<RecoverRequest>() else { return false };
     request.from_turn = turn;
     true
+}
+
+#[command(name = "RC")]
+#[register_to(PASS_COMMANDS as PassCommandHandler with &'static str)]
+async fn replay_list(player: &mut Player, _arguments: &mut PassCommandArguments) {
+    let key = player.states.get::<OriginName>().map(|origin_name| origin_name.0.clone()).unwrap_or_default();
+    player.send_message("以下是您近期进行的决斗，密码处输入 RC,T回合数#决斗编号 即可创建复盘房间", ygopro_data::constants::Color::Babyblue);
+    for (index, line) in list(&key).await.iter().enumerate() {
+        player.send_message(&format!("<{}> {}", index + 1, line), ygopro_data::constants::Color::Babyblue);
+    }
 }
 
 #[after(ctos::JoinGame)]
@@ -321,46 +335,112 @@ async fn recover(id: &str) -> Option<Replay> {
     provider.recover(id).await
 }
 
+async fn list(key: &str) -> Vec<String> {
+    let selected = RECOVER_PROVIDER.load_full();
+    let Some(provider) = selected.as_ref().as_ref() else { return Vec::new() };
+    provider.list(key).await
+}
+
+/// Save replays to the local file system, and recover/list from local.
+/// Please note that in this mode, no api is involved. If you want to save meta, please check
+/// srvpro-api's [`duel_log`](srvpro_api::plugins::duel_log).
 mod file {
     use std::io::Cursor;
     use std::path::Path;
 
     use async_trait::async_trait;
     use binrw::BinRead;
+    use glob::Pattern;
 
     use ygopro_data::data::Replay;
+    use ygopro_data::data::ReplayMode;
     use ygopro_data::message::gm;
     use ygopro_derive::Configuration;
+    use ygopro_derive::handler;
+    use ygopro_derive::register_to;
+    use ygopro_handler::All;
 
+    use crate::mode::MODES;
+    use crate::mode::ModeHandler as Handler;
+    use crate::mode::RoomConfiguration;
     use crate::plugin::recover::RECOVER_PROVIDERS;
     use crate::plugin::recover::Recover;
 
     pub static NAME: &'static str = module_path!();
 
+    #[distributed_slice(RECOVER_PROVIDERS)]
+    static FILE: (&'static str, fn() -> Box<dyn Recover>) = ("file", || Box::new(File));
+    
     #[derive(Clone, Configuration)]
     #[config(sync)]
     pub struct Configuration {
         #[config(default = "\"replays\".to_string()")]
         pub path: String,
+        pub machine: u16,
+        #[config(default = "10")]
+        pub list_limit: usize,
     }
 
     struct File;
 
+    #[handler(All)]
+    #[register_to(MODES)]
+    fn on_configure(config: &mut RoomConfiguration) {
+        let Some(configuration) = crate::configuration::get_configuration::<Configuration>() else { return };
+        config.ygopru_configuration.enable_plugin_with_inited::<ygopro::plugin::replay::Configuration>(ygopro::plugin::replay::NAME, |replay| {
+            let replay = replay.into_mut();
+            replay.mode |= ReplayMode::SaveInServer;
+            replay.save_path = configuration.path;
+            replay.file_template = "{id} {time} {players} Duel {duel}".to_string();
+            replay.machine = configuration.machine;
+            replay.format = ygopro::plugin::replay::Format::YgoproForge;
+        });
+    }
+
     #[async_trait]
     impl Recover for File {
+        async fn list(&self, key: &str) -> Vec<String> {
+            let Some(configuration) = crate::configuration::get_configuration::<Configuration>() else {
+                log::warn!("recover file provider has no configuration.");
+                return Vec::new()
+            };
+            list_replays(&configuration.path, key, configuration.list_limit).await
+        }
+
         async fn recover(&self, id: &str) -> Option<Replay> {
             let Some(configuration) = crate::configuration::get_configuration::<Configuration>() else {
                 log::warn!("recover file provider has no configuration.");
                 return None
             };
-            let path = Path::new(&configuration.path).join(id);
-            if let Some(replay) = read_replay(&path.with_extension("yrp")).await { return Some(replay) }
-            read_forge_replay(&path.with_extension("yrp3d")).await
+            let id = Pattern::escape(id);
+            let pattern = format!("{}/{id} *.yrp*", configuration.path);
+            // glob::glob walks the directory with blocking syscalls; keep it off the runtime workers.
+            let path = tokio::task::spawn_blocking(move || glob::glob(&pattern).ok()?.flatten().next()).await.ok().flatten()?;
+            if path.extension().and_then(|extension| extension.to_str()) == Some("yrp") { read_replay(&path).await } else { read_forge_replay(&path).await }
         }
     }
 
-    #[distributed_slice(RECOVER_PROVIDERS)]
-    static FILE: (&'static str, fn() -> Box<dyn Recover>) = ("file", || Box::new(File));
+
+    async fn list_replays(directory: &str, key: &str, limit: usize) -> Vec<String> {
+        let key = Pattern::escape(key);
+        let patterns = [format!("{directory}/* {key} VS *.yrp*"), format!("{directory}/* VS {key} *.yrp*")];
+        let mut paths = Vec::new();
+        for pattern in patterns {
+            // glob::glob walks the directory with blocking syscalls; keep it off the runtime workers.
+            let found = tokio::task::spawn_blocking(move || glob::glob(&pattern).map(|paths| paths.flatten().collect::<Vec<_>>()).unwrap_or_default()).await.unwrap_or_default();
+            paths.extend(found);
+        }
+        paths.sort();
+        paths.dedup();
+        paths.reverse();
+        paths.truncate(limit);
+        paths.into_iter().filter_map(|path| id_of(&path)).collect()
+    }
+
+    fn id_of(path: &Path) -> Option<String> {
+        let stem = path.file_stem()?.to_str()?;
+        Some(stem.split_once(' ').map_or(stem, |(id, _)| id).to_string())
+    }
 
     async fn read_replay(path: &Path) -> Option<Replay> {
         let bytes = match tokio::fs::read(path).await {
@@ -422,7 +502,8 @@ mod api {
     #[derive(Clone, Configuration)]
     #[config(sync)]
     pub struct Configuration {
-        pub url: String,
+        pub list_url: String,
+        pub replay_url: String,
         pub auth: String,
     }
 
@@ -430,12 +511,24 @@ mod api {
 
     #[async_trait]
     impl Recover for Api {
+        async fn list(&self, key: &str) -> Vec<String> {
+            let Some(configuration) = crate::configuration::get_configuration::<Configuration>() else {
+                log::warn!("recover api provider has no configuration.");
+                return Vec::new()
+            };
+            let Some(bytes) = fetch(&configuration.list_url.replace("{id}", key), &configuration.auth).await else { return Vec::new() };
+            serde_json::from_slice(&bytes).unwrap_or_else(|error| {
+                log::warn!("cannot parse recover list: {error}");
+                Vec::new()
+            })
+        }
+
         async fn recover(&self, id: &str) -> Option<Replay> {
             let Some(configuration) = crate::configuration::get_configuration::<Configuration>() else {
                 log::warn!("recover api provider has no configuration.");
                 return None
             };
-            let bytes = fetch(&configuration, id).await?;
+            let bytes = fetch(&configuration.replay_url.replace("{id}", id), &configuration.auth).await?;
             parse(&bytes)
         }
     }
@@ -443,9 +536,9 @@ mod api {
     #[distributed_slice(RECOVER_PROVIDERS)]
     static API: (&'static str, fn() -> Box<dyn Recover>) = ("api", || Box::new(Api));
 
-    async fn fetch(configuration: &Configuration, id: &str) -> Option<Vec<u8>> {
-        let url = configuration.url.replace("{id}", id);
-        let auth = configuration.auth.clone();
+    async fn fetch(url: &str, auth: &str) -> Option<Vec<u8>> {
+        let url = url.to_string();
+        let auth = auth.to_string();
         tokio::task::spawn_blocking(move || fetch_blocking(&url, &auth)).await.ok().flatten()
     }
 

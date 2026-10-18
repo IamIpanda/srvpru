@@ -1,4 +1,5 @@
 target/
+.cargo/
 **/*.rs.bk
 node_modules/
 srvpro-portal/dist/

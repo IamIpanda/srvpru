@@ -1,6 +1,7 @@
 pub mod bad_words;
 pub mod death;
 pub mod dialogues;
+pub mod duel_log;
 pub mod plugin;
 pub mod roomlist;
 pub mod shout;

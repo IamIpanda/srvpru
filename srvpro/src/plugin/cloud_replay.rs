@@ -23,9 +23,14 @@ use crate::mode::MODES;
 use crate::mode::ModeHandler as Handler;
 use crate::mode::Normal;
 use crate::mode::RoomConfiguration;
+use crate::plugin::pass_command::PassCommandArguments;
+use crate::plugin::pass_command::PassCommandHandler;
+use crate::plugin::pass_command::PASS_COMMANDS;
+use crate::plugin::virtual_password::OriginName;
 use crate::room::Anymap;
 use crate::room::CTOS_HANDLERS;
 use crate::room::ClientToServerHandler;
+use crate::room::Player;
 use crate::room::Room;
 
 pub static NAME: &'static str = module_path!();
@@ -34,6 +39,7 @@ pub type Replay = BoxStream<'static, Complex<stoc::Message>>;
 
 #[async_trait]
 pub trait CloudReplay: Send + Sync {
+    async fn list(&self, key: &str) -> Vec<String>;
     async fn open(&self, id: &str) -> Option<Replay>;
 }
 
@@ -69,6 +75,16 @@ fn on_mode(config: &mut RoomConfiguration, part: &str) -> bool {
     true
 }
 
+#[command(name = "R")]
+#[register_to(PASS_COMMANDS as PassCommandHandler with &'static str)]
+async fn replay_list(player: &mut Player, _arguments: &mut PassCommandArguments) {
+    let key = player.states.get::<OriginName>().map(|origin_name| origin_name.0.clone()).unwrap_or_default();
+    player.send_message("以下是您近期的云录像，密码处输入 R#录像编号 即可观看", Color::Babyblue);
+    for (index, line) in list(&key).await.iter().enumerate() {
+        player.send_message(&format!("<{}> {}", index + 1, line), Color::Babyblue);
+    }
+}
+
 #[before(ctos::JoinGame, priority = 16)]
 #[register_to(CTOS_HANDLERS as ClientToServerHandler)]
 fn on_join_game(room: &mut Room, states: &mut Anymap, index: usize, stop: &mut StopFlag) -> bool {
@@ -99,18 +115,21 @@ async fn open(id: &str) -> Option<Replay> {
     provider.open(id).await
 }
 
+async fn list(key: &str) -> Vec<String> {
+    let selected = CLOUD_REPLAY_PROVIDER.load_full();
+    let Some(provider) = selected.as_ref().as_ref() else { return Vec::new() };
+    provider.list(key).await
+}
+
 mod file {
     use std::io::Cursor;
     use std::path::Path;
-    use std::sync::atomic::AtomicU64;
-    use std::sync::atomic::Ordering;
-    use std::time::SystemTime;
-    use std::time::UNIX_EPOCH;
 
     use async_trait::async_trait;
     use binrw::BinRead;
     use futures::StreamExt;
     use futures::stream;
+    use glob::Pattern;
 
     use ygopro_data::complex::Complex;
     use ygopro_data::constants::Netplayer;
@@ -131,14 +150,6 @@ mod file {
     use crate::plugin::cloud_replay::CloudReplay;
     use crate::plugin::cloud_replay::Replay;
 
-    const EPOCH: u64 = 1_600_000_000_000;
-    const MACHINE_BITS: u64 = 10;
-    const SEQUENCE_BITS: u64 = 12;
-    const MACHINE_MASK: u64 = (1 << MACHINE_BITS) - 1;
-    const SEQUENCE_MASK: u64 = (1 << SEQUENCE_BITS) - 1;
-
-    static SEQUENCE: AtomicU64 = AtomicU64::new(0);
-
     pub static NAME: &'static str = module_path!();
 
     #[derive(Clone, Configuration)]
@@ -147,18 +158,31 @@ mod file {
         #[config(default = "\"replays\".to_string()")]
         pub path: String,
         pub machine: u16,
+        #[config(default = "10")]
+        pub list_limit: usize,
     }
 
     struct File;
 
     #[async_trait]
     impl CloudReplay for File {
+        async fn list(&self, key: &str) -> Vec<String> {
+            let Some(configuration) = crate::configuration::get_configuration::<Configuration>() else {
+                log::warn!("cloud replay file provider has no configuration.");
+                return Vec::new()
+            };
+            list_replays(&configuration.path, key, configuration.list_limit).await
+        }
+
         async fn open(&self, id: &str) -> Option<Replay> {
             let Some(configuration) = crate::configuration::get_configuration::<Configuration>() else {
                 log::warn!("cloud replay file provider has no configuration.");
                 return None
             };
-            let path = Path::new(&configuration.path).join(id).with_extension("yrp3d");
+            let id = Pattern::escape(id);
+            let pattern = format!("{}/{id} *.yrp3d", configuration.path);
+            // glob::glob walks the directory with blocking syscalls; keep it off the runtime workers.
+            let path = tokio::task::spawn_blocking(move || glob::glob(&pattern).ok()?.flatten().next()).await.ok().flatten()?;
             let bytes = match tokio::fs::read(&path).await {
                 Ok(bytes) => bytes,
                 Err(error) => {
@@ -183,33 +207,39 @@ mod file {
     #[distributed_slice(CLOUD_REPLAY_PROVIDERS)]
     static FILE: (&'static str, fn() -> Box<dyn CloudReplay>) = ("file", || Box::new(File));
 
+    async fn list_replays(directory: &str, key: &str, limit: usize) -> Vec<String> {
+        let key = Pattern::escape(key);
+        let patterns = [format!("{directory}/* {key} VS *.yrp3d"), format!("{directory}/* VS {key} *.yrp3d")];
+        let mut paths = Vec::new();
+        for pattern in patterns {
+            // glob::glob walks the directory with blocking syscalls; keep it off the runtime workers.
+            let found = tokio::task::spawn_blocking(move || glob::glob(&pattern).map(|paths| paths.flatten().collect::<Vec<_>>()).unwrap_or_default()).await.unwrap_or_default();
+            paths.extend(found);
+        }
+        paths.sort();
+        paths.dedup();
+        paths.reverse();
+        paths.truncate(limit);
+        paths.into_iter().filter_map(|path| id_of(&path)).collect()
+    }
+
+    fn id_of(path: &Path) -> Option<String> {
+        let stem = path.file_stem()?.to_str()?;
+        Some(stem.split_once(' ').map_or(stem, |(id, _)| id).to_string())
+    }
+
     #[handler(All)]
     #[register_to(MODES)]
     fn on_configure(config: &mut RoomConfiguration) {
         let Some(configuration) = crate::configuration::get_configuration::<Configuration>() else { return };
-        config.ygopru_configuration.enable_plugin_with_configuration(ygopro::plugin::replay::NAME, ygopro::plugin::replay::Configuration {
-            mode: ReplayMode::SaveInServer,
-            save_path: configuration.path,
-            file_template: replay_id(configuration.machine),
-            format: ygopro::plugin::replay::Format::YgoproForge,
+        config.ygopru_configuration.enable_plugin_with_inited::<ygopro::plugin::replay::Configuration>(ygopro::plugin::replay::NAME, |replay| {
+            let replay = replay.into_mut();
+            replay.mode |= ReplayMode::SaveInServer;
+            replay.save_path = configuration.path;
+            replay.file_template = "{id} {time} {players} Duel {duel}".to_string();
+            replay.machine = configuration.machine;
+            replay.format = ygopro::plugin::replay::Format::YgoproForge;
         });
-    }
-
-    fn replay_id(machine: u16) -> String {
-        let mut id = snowflake_id(machine);
-        let mut characters = Vec::new();
-        loop {
-            characters.push(char::from_digit((id % 36) as u32, 36).unwrap_or('0'));
-            id /= 36;
-            if id == 0 { break }
-        }
-        characters.into_iter().rev().collect()
-    }
-
-    fn snowflake_id(machine: u16) -> u64 {
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|elapsed| elapsed.as_millis() as u64).unwrap_or(0).saturating_sub(EPOCH);
-        let sequence = SEQUENCE.fetch_add(1, Ordering::Relaxed) & SEQUENCE_MASK;
-        (timestamp << (MACHINE_BITS + SEQUENCE_BITS)) | ((machine as u64 & MACHINE_MASK) << SEQUENCE_BITS) | sequence
     }
 }
 
@@ -239,7 +269,8 @@ mod api {
     #[derive(Clone, Configuration)]
     #[config(sync)]
     pub struct Configuration {
-        pub url: String,
+        pub list_url: String,
+        pub replay_url: String,
         pub auth: String,
     }
 
@@ -247,12 +278,24 @@ mod api {
 
     #[async_trait]
     impl CloudReplay for Api {
+        async fn list(&self, key: &str) -> Vec<String> {
+            let Some(configuration) = crate::configuration::get_configuration::<Configuration>() else {
+                log::warn!("cloud replay api provider has no configuration.");
+                return Vec::new()
+            };
+            let Some(bytes) = fetch(&configuration.list_url.replace("{id}", key), &configuration.auth).await else { return Vec::new() };
+            serde_json::from_slice(&bytes).unwrap_or_else(|error| {
+                log::warn!("cannot parse cloud replay list: {error}");
+                Vec::new()
+            })
+        }
+
         async fn open(&self, id: &str) -> Option<Replay> {
             let Some(configuration) = crate::configuration::get_configuration::<Configuration>() else {
                 log::warn!("cloud replay api provider has no configuration.");
                 return None
             };
-            let bytes = fetch(&configuration, id).await?;
+            let bytes = fetch(&configuration.replay_url.replace("{id}", id), &configuration.auth).await?;
             if bytes.starts_with(b"yrp1") || bytes.starts_with(b"yrp2") {
                 log::warn!("cloud replay api provider got a yrp replay, which carries no game message.");
                 return None
@@ -274,9 +317,9 @@ mod api {
     #[distributed_slice(CLOUD_REPLAY_PROVIDERS)]
     static API: (&'static str, fn() -> Box<dyn CloudReplay>) = ("api", || Box::new(Api));
 
-    async fn fetch(configuration: &Configuration, id: &str) -> Option<Vec<u8>> {
-        let url = configuration.url.replace("{id}", id);
-        let auth = configuration.auth.clone();
+    async fn fetch(url: &str, auth: &str) -> Option<Vec<u8>> {
+        let url = url.to_string();
+        let auth = auth.to_string();
         tokio::task::spawn_blocking(move || fetch_blocking(&url, &auth)).await.ok().flatten()
     }
 

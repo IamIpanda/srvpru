@@ -8,6 +8,7 @@ anymap3 = { version = "1", default-features = false, features = ["hashbrown"] }
 arc-swap = "1"
 axum = { version = "0.8", features = ["ws"] }
 base64 = "0.23"
+chrono = "0.4"
 tower = { version = "0.5", features = ["util"] }
 linkme = "0.3"
 futures = "0.3"

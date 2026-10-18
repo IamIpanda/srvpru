@@ -47,7 +47,7 @@ fn before_chat(room: &mut Room, index: usize, chat: &ctos::Chat, stop: &mut Stop
     }
 }
 
-#[command]
+#[command(module = "srvpro::core")]
 #[register_to(CHAT_COMMANDS as ChatCommandHandler with &'static str)]
 fn help(room: &mut Room, index: usize, _args: &str) {
     if let Some(player) = room.players.get(index) {
@@ -62,7 +62,7 @@ fn help(room: &mut Room, index: usize, _args: &str) {
     }
 }
 
-#[command]
+#[command(module = "srvpro::core")]
 #[register_to(CHAT_COMMANDS as ChatCommandHandler with &'static str)]
 fn roomname(room: &mut Room, index: usize, _args: &str) {
     room.players[index].send_message(&format!("Room name: {}", room.name), Color::Babyblue);

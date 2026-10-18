@@ -60,7 +60,7 @@ pub async fn serve() {
     let port = configuration.port;
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port)).await.expect("cannot bind port");
     log::info!("api listening on port {}", port);
-    axum::serve(listener, Router::new().fallback(dispatch)).await.expect("api server failed");
+    axum::serve(listener, Router::new().fallback(dispatch).into_make_service_with_connect_info::<std::net::SocketAddr>()).await.expect("api server failed");
 }
 
 fn build_router_from_configuration() -> Router {

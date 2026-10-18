@@ -18,7 +18,7 @@ pub struct Configuration {
 }
 
 const SCHEMA: &str = include_str!("init.sql");
-const PERMISSIONS: &str = "stop,shout,get_rooms,change_settings,manage_users,start_death";
+const PERMISSIONS: &str = crate::auth::MAGIC_ALL_PERMISSION;
 const SECRET_NAME: &str = "jwt";
 const SECRET_LENGTH: usize = 64;
 const PASSWORD_LENGTH: usize = 64;

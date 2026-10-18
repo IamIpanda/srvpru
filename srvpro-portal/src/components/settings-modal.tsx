@@ -2,12 +2,12 @@ import { useEffect, useState } from 'preact/hooks'
 import { DeleteOutlined, EditOutlined, ReloadOutlined, StopOutlined } from '@ant-design/icons'
 import { App as AntdApp, Button, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, theme, Tooltip } from 'antd'
 import type { TableColumnsType } from 'antd'
-import { configs, deleteConfig, deleteUser, disablePlugins, enablePlugins, listPlugins, listUsers, refreshPlugins, saveBadWords, saveUser, setConfig } from '../api'
+import { configs, delete_config, delete_user, disable_plugins, enable_plugins, list_plugins, list_users, refresh_plugins, save_bad_words, save_user, set_config } from '../api'
 import type { User } from '../api'
 
 type SettingsModalProps = {
   open: boolean
-  onClose: () => void
+  on_close: () => void
 }
 
 type GeneralField = {
@@ -17,17 +17,17 @@ type GeneralField = {
   fallback?: string
 }
 
-const generalFields: GeneralField[] = [
+const general_fields: GeneralField[] = [
   { key: 'api_name', label: '服务器名称', editable: true },
   { key: 'auth_token_ttl_days', label: '登录有效期（天）', fallback: '180' },
   { key: 'api_port', label: 'HTTP 端口', fallback: '7922' },
   { key: 'server_port', label: 'ygopro 端口', fallback: '7911' },
 ]
 
-const permissions = ['stop', 'shout', 'get_rooms', 'change_settings', 'manage_users', 'start_death']
+const permissions = ['all', 'stop', 'shout', 'get_rooms', 'change_settings', 'manage_users', 'start_death', 'duel_log']
 
-export function SettingsModal({ open, onClose }: SettingsModalProps) {
-  const [advanced, setAdvanced] = useState(false)
+export function SettingsModal({ open, on_close }: SettingsModalProps) {
+  const [advanced, set_advanced] = useState(false)
 
   const tabs = advanced
     ? [
@@ -50,7 +50,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
       title={
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 15 }}>
           设置
-          <Switch checkedChildren="高级" unCheckedChildren="高级" checked={advanced} onChange={setAdvanced} />
+          <Switch checkedChildren="高级" unCheckedChildren="高级" checked={advanced} onChange={set_advanced} />
         </div>
       }
       open={open}
@@ -58,7 +58,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
       closable={false}
       width="fit-content"
       destroyOnHidden
-      onCancel={onClose}
+      onCancel={on_close}
     >
       <Tabs key={advanced ? 'advanced' : 'normal'} tabPlacement="start" items={tabs} />
     </Modal>
@@ -66,34 +66,34 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
 }
 
 function GeneralTab() {
-  const [values, setValues] = useState<Record<string, string>>({})
-  const [pending, setPending] = useState(false)
+  const [values, set_values] = useState<Record<string, string>>({})
+  const [pending, set_pending] = useState(false)
   const { message } = AntdApp.useApp()
 
   useEffect(() => {
-    Promise.all([configs('api'), configs('auth'), configs('server')]).then(([api, auth, server]) => setValues({ ...api, ...auth, ...server })).catch(() => {})
+    Promise.all([configs('api'), configs('auth'), configs('server')]).then(([api, auth, server]) => set_values({ ...api, ...auth, ...server })).catch(() => {})
   }, [])
 
   const save = async () => {
-    setPending(true)
+    set_pending(true)
     try {
-      await setConfig('api_name', values.api_name ?? '')
+      await set_config('api_name', values.api_name ?? '')
       message.success('保存成功')
     } catch (failure) {
       message.error(failure instanceof Error ? failure.message : '保存失败')
     } finally {
-      setPending(false)
+      set_pending(false)
     }
   }
 
   return (
     <Form layout="vertical" style={{ width: 420 }}>
-      {generalFields.map((field) => (
+      {general_fields.map((field) => (
         <Form.Item key={field.key} label={field.label}>
           <Input
             disabled={!field.editable}
             value={values[field.key] ?? field.fallback ?? ''}
-            onChange={(event) => setValues({ ...values, [field.key]: event.currentTarget.value })}
+            onChange={(event) => set_values({ ...values, [field.key]: event.currentTarget.value })}
           />
         </Form.Item>
       ))}
@@ -103,14 +103,14 @@ function GeneralTab() {
 }
 
 function PluginsTab() {
-  const [plugins, setPlugins] = useState<string[]>([])
-  const [draft, setDraft] = useState('')
-  const [pending, setPending] = useState(false)
+  const [plugins, set_plugins] = useState<string[]>([])
+  const [draft, set_draft] = useState('')
+  const [pending, set_pending] = useState(false)
   const { message } = AntdApp.useApp()
 
   const load = async () => {
     try {
-      setPlugins(await listPlugins())
+      set_plugins(await list_plugins())
     } catch (failure) {
       message.error(failure instanceof Error ? failure.message : '无法读取插件')
     }
@@ -121,7 +121,7 @@ function PluginsTab() {
   }, [])
 
   const run = async (action: () => Promise<void>, done: string) => {
-    setPending(true)
+    set_pending(true)
     try {
       await action()
       await load()
@@ -129,7 +129,7 @@ function PluginsTab() {
     } catch (failure) {
       message.error(failure instanceof Error ? failure.message : `${done}失败`)
     } finally {
-      setPending(false)
+      set_pending(false)
     }
   }
 
@@ -142,9 +142,9 @@ function PluginsTab() {
       render: (_, row) => (
         <Space size={4}>
           <Tooltip title="刷新配置">
-            <Button type="text" size="small" icon={<ReloadOutlined />} onClick={() => run(() => refreshPlugins([row.plugin]), '刷新配置')} />
+            <Button type="text" size="small" icon={<ReloadOutlined />} onClick={() => run(() => refresh_plugins([row.plugin]), '刷新配置')} />
           </Tooltip>
-          <Popconfirm title="禁用该插件？" onConfirm={() => run(() => disablePlugins([row.plugin]), '禁用')}>
+          <Popconfirm title="禁用该插件？" onConfirm={() => run(() => disable_plugins([row.plugin]), '禁用')}>
             <Tooltip title="禁用">
               <Button type="text" danger size="small" icon={<StopOutlined />} />
             </Tooltip>
@@ -157,8 +157,8 @@ function PluginsTab() {
   return (
     <Space orientation="vertical" size={12} style={{ width: 640 }}>
       <Space wrap>
-        <Input placeholder="插件名" value={draft} onChange={(event) => setDraft(event.currentTarget.value)} onPressEnter={() => draft !== '' && run(() => enablePlugins([draft]), '启用')} style={{ width: 360 }} />
-        <Button type="primary" loading={pending} disabled={draft === ''} onClick={() => run(() => enablePlugins([draft]), '启用')}>启用</Button>
+        <Input placeholder="插件名" value={draft} onChange={(event) => set_draft(event.currentTarget.value)} onPressEnter={() => draft !== '' && run(() => enable_plugins([draft]), '启用')} style={{ width: 360 }} />
+        <Button type="primary" loading={pending} disabled={draft === ''} onClick={() => run(() => enable_plugins([draft]), '启用')}>启用</Button>
       </Space>
       <Table columns={columns} dataSource={plugins.map((plugin) => ({ plugin }))} rowKey="plugin" pagination={false} size="small" />
     </Space>
@@ -171,16 +171,16 @@ type ConfigEntry = {
 }
 
 function ConfigValuesTab() {
-  const [entries, setEntries] = useState<ConfigEntry[]>([])
-  const [draftKey, setDraftKey] = useState('')
-  const [draftValue, setDraftValue] = useState('')
-  const [pending, setPending] = useState(false)
+  const [entries, set_entries] = useState<ConfigEntry[]>([])
+  const [draft_key, set_draft_key] = useState('')
+  const [draft_value, set_draft_value] = useState('')
+  const [pending, set_pending] = useState(false)
   const { message } = AntdApp.useApp()
 
   const load = async () => {
     try {
       const result = await configs('')
-      setEntries(Object.entries(result).map(([key, value]) => ({ key, value })).sort((left, right) => left.key.localeCompare(right.key)))
+      set_entries(Object.entries(result).map(([key, value]) => ({ key, value })).sort((left, right) => left.key.localeCompare(right.key)))
     } catch (failure) {
       message.error(failure instanceof Error ? failure.message : '无法读取配置')
     }
@@ -191,24 +191,24 @@ function ConfigValuesTab() {
   }, [])
 
   const save = async () => {
-    if (draftKey === '') return
-    setPending(true)
+    if (draft_key === '') return
+    set_pending(true)
     try {
-      await setConfig(draftKey, draftValue)
+      await set_config(draft_key, draft_value)
       await load()
-      setDraftKey('')
-      setDraftValue('')
+      set_draft_key('')
+      set_draft_value('')
       message.success('保存成功')
     } catch (failure) {
       message.error(failure instanceof Error ? failure.message : '保存失败')
     } finally {
-      setPending(false)
+      set_pending(false)
     }
   }
 
   const remove = async (key: string) => {
     try {
-      await deleteConfig(key)
+      await delete_config(key)
       await load()
       message.success('删除成功')
     } catch (failure) {
@@ -226,7 +226,7 @@ function ConfigValuesTab() {
       render: (_, entry) => (
         <Space size={4}>
           <Tooltip title="编辑">
-            <Button type="text" size="small" icon={<EditOutlined />} onClick={() => { setDraftKey(entry.key); setDraftValue(entry.value) }} />
+            <Button type="text" size="small" icon={<EditOutlined />} onClick={() => { set_draft_key(entry.key); set_draft_value(entry.value) }} />
           </Tooltip>
           <Popconfirm title="删除该配置？" onConfirm={() => remove(entry.key)}>
             <Tooltip title="删除">
@@ -241,9 +241,9 @@ function ConfigValuesTab() {
   return (
     <Space orientation="vertical" size={12} style={{ width: 640 }}>
       <Space wrap>
-        <Input placeholder="键" value={draftKey} onChange={(event) => setDraftKey(event.currentTarget.value)} style={{ width: 200 }} />
-        <Input placeholder="值" value={draftValue} onChange={(event) => setDraftValue(event.currentTarget.value)} onPressEnter={save} style={{ width: 300 }} />
-        <Button type="primary" loading={pending} disabled={draftKey === ''} onClick={save}>保存</Button>
+        <Input placeholder="键" value={draft_key} onChange={(event) => set_draft_key(event.currentTarget.value)} style={{ width: 200 }} />
+        <Input placeholder="值" value={draft_value} onChange={(event) => set_draft_value(event.currentTarget.value)} onPressEnter={save} style={{ width: 300 }} />
+        <Button type="primary" loading={pending} disabled={draft_key === ''} onClick={save}>保存</Button>
       </Space>
       <Table columns={columns} dataSource={entries} rowKey="key" tableLayout="fixed" pagination={false} size="small" />
     </Space>
@@ -251,14 +251,14 @@ function ConfigValuesTab() {
 }
 
 function UsersTab() {
-  const [users, setUsers] = useState<User[]>([])
-  const [draft, setDraft] = useState({ username: '', password: '', permissions: [] as string[] })
-  const [pending, setPending] = useState(false)
+  const [users, set_users] = useState<User[]>([])
+  const [draft, set_draft] = useState({ username: '', password: '', permissions: [] as string[] })
+  const [pending, set_pending] = useState(false)
   const { message } = AntdApp.useApp()
 
   const load = async () => {
     try {
-      setUsers(await listUsers())
+      set_users(await list_users())
     } catch (failure) {
       message.error(failure instanceof Error ? failure.message : '无法读取用户')
     }
@@ -270,22 +270,22 @@ function UsersTab() {
 
   const save = async () => {
     if (draft.username === '') return
-    setPending(true)
+    set_pending(true)
     try {
-      await saveUser(draft)
-      setDraft({ username: '', password: '', permissions: [] })
+      await save_user(draft)
+      set_draft({ username: '', password: '', permissions: [] })
       await load()
       message.success('保存成功')
     } catch (failure) {
       message.error(failure instanceof Error ? failure.message : '保存失败')
     } finally {
-      setPending(false)
+      set_pending(false)
     }
   }
 
   const remove = async (username: string) => {
     try {
-      await deleteUser(username)
+      await delete_user(username)
       await load()
       message.success('删除成功')
     } catch (failure) {
@@ -303,7 +303,7 @@ function UsersTab() {
       render: (_, user) => (
         <Space size={4}>
           <Tooltip title="编辑">
-            <Button type="text" size="small" icon={<EditOutlined />} onClick={() => setDraft({ username: user.username, password: '', permissions: user.permissions })} />
+            <Button type="text" size="small" icon={<EditOutlined />} onClick={() => set_draft({ username: user.username, password: '', permissions: user.permissions })} />
           </Tooltip>
           <Popconfirm title="删除该用户？" onConfirm={() => remove(user.username)}>
             <Tooltip title="删除">
@@ -318,14 +318,14 @@ function UsersTab() {
   return (
     <Space orientation="vertical" size={12} style={{ width: 840 }}>
       <Space wrap>
-        <Input placeholder="用户名" value={draft.username} onChange={(event) => setDraft({ ...draft, username: event.currentTarget.value })} style={{ width: 160 }} />
-        <Input.Password placeholder="密码（留空则不改）" value={draft.password} onChange={(event) => setDraft({ ...draft, password: event.currentTarget.value })} style={{ width: 200 }} />
+        <Input placeholder="用户名" value={draft.username} onChange={(event) => set_draft({ ...draft, username: event.currentTarget.value })} style={{ width: 160 }} />
+        <Input.Password placeholder="密码（留空则不改）" value={draft.password} onChange={(event) => set_draft({ ...draft, password: event.currentTarget.value })} style={{ width: 200 }} />
         <Select
           mode="multiple"
           placeholder="权限"
           value={draft.permissions}
           options={permissions.map((permission) => ({ value: permission, label: permission }))}
-          onChange={(values) => setDraft({ ...draft, permissions: values })}
+          onChange={(values) => set_draft({ ...draft, permissions: values })}
           style={{ minWidth: 240 }}
         />
         <Button type="primary" loading={pending} onClick={save}>保存</Button>
@@ -353,7 +353,7 @@ type Group = {
   fields: Field[]
 }
 
-const welcomeGroups: Group[] = [
+const welcome_groups: Group[] = [
   {
     title: '欢迎语',
     prefix: 'welcome',
@@ -365,7 +365,7 @@ const welcomeGroups: Group[] = [
   },
 ]
 
-const duelGroups: Group[] = [
+const duel_groups: Group[] = [
   {
     title: '随机匹配',
     prefix: 'random_match',
@@ -398,7 +398,7 @@ const duelGroups: Group[] = [
   },
 ]
 
-const tipGroups: Group[] = [
+const tip_groups: Group[] = [
   {
     title: '定时提示',
     prefix: 'tip',
@@ -413,7 +413,7 @@ const tipGroups: Group[] = [
   },
 ]
 
-const dialoguesGroups: Group[] = [
+const dialogues_groups: Group[] = [
   {
     title: '登场台词',
     prefix: 'dialogues',
@@ -426,7 +426,7 @@ const dialoguesGroups: Group[] = [
   },
 ]
 
-const reportGroups: Group[] = [
+const report_groups: Group[] = [
   {
     title: '对局上报',
     prefix: 'report',
@@ -450,68 +450,68 @@ const reportGroups: Group[] = [
 ]
 
 function WelcomeTab() {
-  return <ConfigTab groups={welcomeGroups} />
+  return <ConfigTab groups={welcome_groups} />
 }
 
 function DuelTab() {
-  return <ConfigTab groups={duelGroups} />
+  return <ConfigTab groups={duel_groups} />
 }
 
 function TipTab() {
-  return <ConfigTab groups={tipGroups} />
+  return <ConfigTab groups={tip_groups} />
 }
 
 function DialoguesTab() {
-  return <ConfigTab groups={dialoguesGroups} />
+  return <ConfigTab groups={dialogues_groups} />
 }
 
 const BAD_WORDS_PLUGIN = 'srvpro::plugin::bad_words'
 
 function BadWordsTab() {
-  const [checkRoomName, setCheckRoomName] = useState(true)
-  const [checkPlayerName, setCheckPlayerName] = useState(true)
-  const [groups, setGroups] = useState('{}')
-  const [enabled, setEnabled] = useState(false)
-  const [pending, setPending] = useState(false)
+  const [check_room_name, set_check_room_name] = useState(true)
+  const [check_player_name, set_check_player_name] = useState(true)
+  const [groups, set_groups] = useState('{}')
+  const [enabled, set_enabled] = useState(false)
+  const [pending, set_pending] = useState(false)
   const { message } = AntdApp.useApp()
   const { token } = theme.useToken()
 
   useEffect(() => {
     configs('bad_words').then((result) => {
-      setCheckRoomName((result.bad_words_check_room_name ?? 'true') !== 'false')
-      setCheckPlayerName((result.bad_words_check_player_name ?? 'true') !== 'false')
-      setGroups(result.bad_words_groups ?? '{}')
+      set_check_room_name((result.bad_words_check_room_name ?? 'true') !== 'false')
+      set_check_player_name((result.bad_words_check_player_name ?? 'true') !== 'false')
+      set_groups(result.bad_words_groups ?? '{}')
     }).catch(() => {})
-    listPlugins().then((plugins) => setEnabled(plugins.includes(BAD_WORDS_PLUGIN))).catch(() => {})
+    list_plugins().then((plugins) => set_enabled(plugins.includes(BAD_WORDS_PLUGIN))).catch(() => {})
   }, [])
 
-  const togglePlugin = async (checked: boolean) => {
-    setPending(true)
+  const toggle_plugin = async (checked: boolean) => {
+    set_pending(true)
     try {
       if (checked) {
-        await enablePlugins([BAD_WORDS_PLUGIN])
+        await enable_plugins([BAD_WORDS_PLUGIN])
       } else {
-        await disablePlugins([BAD_WORDS_PLUGIN])
+        await disable_plugins([BAD_WORDS_PLUGIN])
       }
-      setEnabled(checked)
+      set_enabled(checked)
     } catch (failure) {
       message.error(failure instanceof Error ? failure.message : '切换插件失败')
     } finally {
-      setPending(false)
+      set_pending(false)
     }
   }
 
   const save = async () => {
-    setPending(true)
+    set_pending(true)
     try {
-      await setConfig('bad_words_check_room_name', String(checkRoomName))
-      await setConfig('bad_words_check_player_name', String(checkPlayerName))
-      await saveBadWords(JSON.parse(groups))
+      await set_config('bad_words_check_room_name', String(check_room_name))
+      await set_config('bad_words_check_player_name', String(check_player_name))
+      await save_bad_words(JSON.parse(groups))
       message.success('保存成功')
     } catch (failure) {
       message.error(failure instanceof Error ? failure.message : '保存失败')
     } finally {
-      setPending(false)
+      set_pending(false)
     }
   }
 
@@ -519,21 +519,21 @@ function BadWordsTab() {
     <Form layout="vertical" style={{ width: 420 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, paddingBottom: 8, borderBottom: `1px solid ${token.colorSplit}`, fontWeight: 600 }}>
         屏蔽词
-        <Switch checked={enabled} loading={pending} onChange={togglePlugin} />
+        <Switch checked={enabled} loading={pending} onChange={toggle_plugin} />
       </div>
-      <Form.Item label="检查房间名"><Switch disabled={!enabled} checked={checkRoomName} onChange={setCheckRoomName} /></Form.Item>
-      <Form.Item label="检查玩家名"><Switch disabled={!enabled} checked={checkPlayerName} onChange={setCheckPlayerName} /></Form.Item>
-      <Form.Item label="词库"><Input.TextArea disabled={!enabled} rows={10} value={groups} onChange={(event) => setGroups(event.currentTarget.value)} /></Form.Item>
+      <Form.Item label="检查房间名"><Switch disabled={!enabled} checked={check_room_name} onChange={set_check_room_name} /></Form.Item>
+      <Form.Item label="检查玩家名"><Switch disabled={!enabled} checked={check_player_name} onChange={set_check_player_name} /></Form.Item>
+      <Form.Item label="词库"><Input.TextArea disabled={!enabled} rows={10} value={groups} onChange={(event) => set_groups(event.currentTarget.value)} /></Form.Item>
       <Button type="primary" loading={pending} onClick={save}>保存</Button>
     </Form>
   )
 }
 
 function ReportTab() {
-  return <ConfigTab groups={reportGroups} />
+  return <ConfigTab groups={report_groups} />
 }
 
-function parseTags(value: string): string[] {
+function parse_tags(value: string): string[] {
   try {
     const parsed: unknown = JSON.parse(value)
     return Array.isArray(parsed) ? parsed.map((tag) => String(tag)) : []
@@ -543,61 +543,61 @@ function parseTags(value: string): string[] {
 }
 
 function ConfigTab({ groups }: { groups: Group[] }) {
-  const [values, setValues] = useState<Record<string, string>>({})
-  const [enabledPlugins, setEnabledPlugins] = useState<string[]>([])
-  const [pending, setPending] = useState(false)
+  const [values, set_values] = useState<Record<string, string>>({})
+  const [enabled_plugins, set_enabled_plugins] = useState<string[]>([])
+  const [pending, set_pending] = useState(false)
   const { message } = AntdApp.useApp()
   const { token } = theme.useToken()
 
   useEffect(() => {
     const prefixes = [...new Set(groups.map((group) => group.prefix))]
-    Promise.all(prefixes.map((prefix) => configs(prefix))).then((results) => setValues(Object.assign({}, ...results))).catch(() => {})
-    if (groups.some((group) => group.toggle)) listPlugins().then(setEnabledPlugins).catch(() => {})
+    Promise.all(prefixes.map((prefix) => configs(prefix))).then((results) => set_values(Object.assign({}, ...results))).catch(() => {})
+    if (groups.some((group) => group.toggle)) list_plugins().then(set_enabled_plugins).catch(() => {})
   }, [])
 
-  const togglePlugin = async (plugin: string, enabled: boolean) => {
-    setPending(true)
+  const toggle_plugin = async (plugin: string, enabled: boolean) => {
+    set_pending(true)
     try {
       if (enabled) {
-        await enablePlugins([plugin])
+        await enable_plugins([plugin])
       } else {
-        await disablePlugins([plugin])
+        await disable_plugins([plugin])
       }
-      setEnabledPlugins(await listPlugins())
+      set_enabled_plugins(await list_plugins())
     } catch (failure) {
       message.error(failure instanceof Error ? failure.message : '切换插件失败')
     } finally {
-      setPending(false)
+      set_pending(false)
     }
   }
 
-  const update = (key: string, value: string) => setValues((current) => ({ ...current, [key]: value }))
+  const update = (key: string, value: string) => set_values((current) => ({ ...current, [key]: value }))
 
-  const valueOf = (field: Field) => values[field.key] ?? field.fallback ?? ''
+  const value_of = (field: Field) => values[field.key] ?? field.fallback ?? ''
 
   const save = async () => {
-    setPending(true)
+    set_pending(true)
     try {
       for (const group of groups) {
         for (const field of group.fields) {
-          await setConfig(field.key, valueOf(field))
+          await set_config(field.key, value_of(field))
         }
       }
-      await refreshPlugins(groups.map((group) => group.plugin))
+      await refresh_plugins(groups.map((group) => group.plugin))
       message.success('保存成功')
     } catch (failure) {
       message.error(failure instanceof Error ? failure.message : '保存失败')
     } finally {
-      setPending(false)
+      set_pending(false)
     }
   }
 
   const render = (group: Group, field: Field) => {
-    const value = valueOf(field)
-    const disabled = group.toggle === true && !enabledPlugins.includes(group.plugin)
+    const value = value_of(field)
+    const disabled = group.toggle === true && !enabled_plugins.includes(group.plugin)
     if (field.kind === 'bool') return <Switch disabled={disabled} checked={value === 'true'} onChange={(checked) => update(field.key, String(checked))} />
     if (field.kind === 'select') return <Select disabled={disabled} value={value} options={field.options} onChange={(selected) => update(field.key, selected)} style={{ width: 160 }} />
-    if (field.kind === 'tags') return <Select mode="tags" open={false} disabled={disabled} value={parseTags(value)} onChange={(tags) => update(field.key, JSON.stringify(tags))} style={{ width: '100%' }} />
+    if (field.kind === 'tags') return <Select mode="tags" open={false} disabled={disabled} value={parse_tags(value)} onChange={(tags) => update(field.key, JSON.stringify(tags))} style={{ width: '100%' }} />
     if (field.kind === 'multi' || field.kind === 'json') return <Input.TextArea disabled={disabled} rows={4} value={value} onChange={(event) => update(field.key, event.currentTarget.value)} />
     return <Input disabled={disabled} value={value} onChange={(event) => update(field.key, event.currentTarget.value)} />
   }
@@ -609,7 +609,7 @@ function ConfigTab({ groups }: { groups: Group[] }) {
           {(groups.length > 1 || group.toggle) && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: index === 0 ? 0 : 8, marginBottom: 16, paddingBottom: 8, borderBottom: `1px solid ${token.colorSplit}`, fontWeight: 600 }}>
               {group.title}
-              {group.toggle && <Switch checked={enabledPlugins.includes(group.plugin)} loading={pending} onChange={(checked) => togglePlugin(group.plugin, checked)} />}
+              {group.toggle && <Switch checked={enabled_plugins.includes(group.plugin)} loading={pending} onChange={(checked) => toggle_plugin(group.plugin, checked)} />}
             </div>
           )}
           {group.fields.map((field) => (

@@ -145,7 +145,7 @@ fn on_player_info(player: &mut Player, player_info: &ctos::PlayerInfo) -> Option
             None
         }
         _ => {
-            player.send_message("昵称包含不当词汇，你已被踢出服务器", Color::Red);
+            player.send_message("昵称包含不当词汇，您已被移出服务器", Color::Red);
             Some("kick")
         }
     }
@@ -153,12 +153,21 @@ fn on_player_info(player: &mut Player, player_info: &ctos::PlayerInfo) -> Option
 
 #[before(ctos::JoinGame)]
 #[register_to(CTOS_PREHANDLERS as ClientToServerPrecursorHandler)]
-fn before_join_game(join_game: &ctos::JoinGame, stop: &mut StopFlag) -> Option<&'static str> {
+fn before_join_game(player: &mut Player, join_game: &ctos::JoinGame, stop: &mut StopFlag) -> Option<&'static str> {
     let configuration = crate::configuration::get_configuration::<Configuration>()?;
     if !configuration.check_room_name { return None }
-    check(&*join_game.pass, &configuration)?;
-    stop.0 = true;
-    Some("kick")
+    let strategy = check(&*join_game.pass, &configuration)?;
+    match strategy {
+        Strategy::Warn => {
+            player.send_message("房名包含不当词汇，请及时修改", Color::Red);
+            None
+        },
+        _ => {
+            stop.0 = true;
+            player.send_message("房名包含不当词汇，您已被移出服务器", Color::Red);
+            Some("kick")
+        }
+    }
 }
 
 #[before(ctos::Chat)]

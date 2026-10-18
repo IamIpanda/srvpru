@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fs::metadata;
+use std::net::SocketAddr;
 use std::sync::LazyLock;
 use std::time::Duration;
 use std::time::SystemTime;
@@ -10,6 +11,7 @@ use std::time::UNIX_EPOCH;
 
 use axum::Json;
 use axum::Router;
+use axum::extract::ConnectInfo;
 use axum::extract::Request;
 use axum::extract::State;
 use axum::http::HeaderMap;
@@ -48,6 +50,8 @@ pub struct Configuration {
 const ALGORITHM: &str = "HS256";
 const SECRET_NAME: &str = "jwt";
 const DEFAULT_TOKEN_TTL_DAYS: u64 = 180;
+pub const MAGIC_ALL_PERMISSION: &str = "all";
+const LOOPBACK: &str = "localhost";
 
 /// The caller a request was authenticated as; carried in request extensions by the middleware.
 #[derive(Clone, Debug)]
@@ -105,14 +109,25 @@ pub fn optional(permission: &'static str, router: Router) -> Router {
     router.layer(middleware::from_fn_with_state(permission, allow_permission))
 }
 
-async fn require_permission(State(permission): State<&'static str>, mut request: Request, next: Next) -> Response {
-    let Some(identity) = identify(&request, permission) else { return StatusCode::FORBIDDEN.into_response() };
+async fn require_permission(State(permission): State<&'static str>, ConnectInfo(address): ConnectInfo<SocketAddr>, mut request: Request, next: Next) -> Response {
+    if address.ip().is_loopback() {
+        request.extensions_mut().insert(Identity { username: LOOPBACK.to_string() });
+        return next.run(request).await
+    }
+    let identity = match identify(&request, permission) {
+        Ok(identity) => identity,
+        Err(status) => return status.into_response(),
+    };
     request.extensions_mut().insert(identity);
     next.run(request).await
 }
 
-async fn allow_permission(State(permission): State<&'static str>, mut request: Request, next: Next) -> Response {
-    if let Some(identity) = identify(&request, permission) { request.extensions_mut().insert(identity); }
+async fn allow_permission(State(permission): State<&'static str>, ConnectInfo(address): ConnectInfo<SocketAddr>, mut request: Request, next: Next) -> Response {
+    if address.ip().is_loopback() {
+        request.extensions_mut().insert(Identity { username: LOOPBACK.to_string() });
+    } else if let Ok(identity) = identify(&request, permission) {
+        request.extensions_mut().insert(identity);
+    }
     next.run(request).await
 }
 
@@ -128,18 +143,19 @@ async fn login(Json(request): Json<LoginRequest>) -> Result<Json<LoginResponse>,
     Ok(Json(LoginResponse { token, expires_in: token_ttl().as_secs() }))
 }
 
-fn identify(request: &Request, permission: &str) -> Option<Identity> {
+fn identify(request: &Request, permission: &str) -> Result<Identity, StatusCode> {
     let mut snapshot = SNAPSHOT.write();
-    if !refresh(&mut snapshot) { return None }
-    let (username, credential) = credentials(request)?;
+    if !refresh(&mut snapshot) { return Err(StatusCode::UNAUTHORIZED) }
+    let (username, credential) = credentials(request).ok_or(StatusCode::UNAUTHORIZED)?;
     let username = if is_token(&credential) {
-        verify_token(&snapshot, &credential)?
+        verify_token(&snapshot, &credential).ok_or(StatusCode::UNAUTHORIZED)?
     } else {
-        if !password_matches(&snapshot, &username, &credential) { return None }
+        if !password_matches(&snapshot, &username, &credential) { return Err(StatusCode::UNAUTHORIZED) }
         username
     };
-    let user = snapshot.users.get(&username)?;
-    user.permissions.contains(permission).then_some(Identity { username })
+    let user = snapshot.users.get(&username).ok_or(StatusCode::UNAUTHORIZED)?;
+    if !user.permissions.contains(permission) && !user.permissions.contains(MAGIC_ALL_PERMISSION) { return Err(StatusCode::FORBIDDEN) }
+    Ok(Identity { username })
 }
 
 fn credentials(request: &Request) -> Option<(String, String)> {

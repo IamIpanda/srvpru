@@ -32,13 +32,13 @@ export type RoomEvent =
   | { event: 'delete'; data: { name: string; started: boolean } }
 
 export type RoomHandlers = {
-  onEvent: (event: RoomEvent) => void
-  onConnection?: (connection: RoomConnection) => void
+  on_event: (event: RoomEvent) => void
+  on_connection?: (connection: RoomConnection) => void
 }
 
 const RETRY_DELAY = 2000
 
-export function applyRoomEvent(rooms: Room[], event: RoomEvent): Room[] {
+export function apply_room_event(rooms: Room[], event: RoomEvent): Room[] {
   if (event.event === 'init') return event.data
   if (event.event === 'delete') return rooms.filter((room) => room.roomname !== event.data.name)
   const room = event.data
@@ -46,23 +46,23 @@ export function applyRoomEvent(rooms: Room[], event: RoomEvent): Room[] {
   return rooms.map((current) => (current.roomname === room.roomname ? room : current))
 }
 
-export function watchRooms(handlers: RoomHandlers): () => void {
+export function watch_rooms(handlers: RoomHandlers): () => void {
   let socket: WebSocket | undefined
   let retry: number | undefined
   let stopped = false
 
   const open = () => {
-    handlers.onConnection?.('connecting')
+    handlers.on_connection?.('connecting')
     const query = new URLSearchParams()
     const credential = token()
     if (credential) query.set('pass', credential)
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
     socket = new WebSocket(`${protocol}//${location.host}/roomlist/ws?${query}`)
-    socket.onopen = () => handlers.onConnection?.('live')
-    socket.onmessage = (message) => handlers.onEvent(JSON.parse(message.data as string) as RoomEvent)
+    socket.onopen = () => handlers.on_connection?.('live')
+    socket.onmessage = (message) => handlers.on_event(JSON.parse(message.data as string) as RoomEvent)
     socket.onclose = () => {
       if (stopped) return
-      handlers.onConnection?.('offline')
+      handlers.on_connection?.('offline')
       retry = window.setTimeout(open, RETRY_DELAY)
     }
   }

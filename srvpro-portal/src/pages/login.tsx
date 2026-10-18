@@ -14,19 +14,19 @@ type Credentials = {
 }
 
 export function Login() {
-  const [error, setError] = useState<string>()
-  const [pending, setPending] = useState(false)
+  const [error, set_error] = useState<string>()
+  const [pending, set_pending] = useState(false)
 
   const submit = async (credentials: Credentials) => {
-    setPending(true)
-    setError(undefined)
+    set_pending(true)
+    set_error(undefined)
     try {
       await login(credentials.username, credentials.password)
       route('/')
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : '登录失败')
+      set_error(failure instanceof Error ? failure.message : '登录失败')
     } finally {
-      setPending(false)
+      set_pending(false)
     }
   }
 

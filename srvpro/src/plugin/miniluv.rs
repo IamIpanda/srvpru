@@ -66,6 +66,10 @@ fn limit_connections_per_ip(client_connect: &mut srvpro::ClientConnect) -> &'sta
 
 struct JoinTimeoutTask(tokio::task::JoinHandle<()>);
 
+impl Drop for JoinTimeoutTask {
+    fn drop(&mut self) { self.0.abort(); }
+}
+
 #[handler(srvpro::ClientConnect)]
 #[register_to(crate::SRVPRO_GLOBAL_HANDLERS as GlobalHandler)]
 fn set_join_timeout(client_connect: &mut srvpro::ClientConnect) {
@@ -87,5 +91,5 @@ fn set_join_timeout(client_connect: &mut srvpro::ClientConnect) {
 #[register_to(SRVPRO_HANDLERS as SrvproMessageHandler)]
 fn reset_join_timeout(player_join: &mut srvpro::PlayerJoin) {
     let Some(player) = player_join.player.as_mut() else { return };
-    if let Some(task) = player.states.remove::<JoinTimeoutTask>() { task.0.abort(); }
+    player.states.remove::<JoinTimeoutTask>();
 }

@@ -240,6 +240,12 @@ impl<Res, Message> FromRequest<extract::Request<Complex<Message>, usize>, Manual
     }
 }
 
+impl<Req, Res> FromRequest<Req, ManuallyDrop<Player>, Res> for &mut Player where Req: Send, Res: Send {
+    fn from_request(bundle: &mut Bundle<Req, ManuallyDrop<Player>, Res>) -> Option<Self> {
+        Some(unsafe { &mut *(&mut *bundle.state as *mut Player) })
+    }
+}
+
 pub struct Sender(pub mpsc::UnboundedSender<Request>);
 impl<Req, Res> FromRequest<Req, State, Res> for Sender where Req: Send, Res: Send {
     fn from_request(bundle: &mut Bundle<Req, State, Res>) -> Option<Self> {
@@ -306,7 +312,7 @@ impl Room {
                         }
                     },
                     Request::Ex(message, index) => {
-                        let (returned_room, message, returned_states, response) = room.run_processor(&srvpro_processor, message, states).await;
+                        let (returned_room, _message, returned_states, response) = room.run_processor(&srvpro_processor, message, states).await;
                         room = returned_room;
                         states = returned_states;
                         match response {
@@ -386,6 +392,13 @@ impl Room {
             player: color.into(),
             msg: format!("[Server]: {message}").into(),
         }.into());
+    }
+
+    pub async fn query_provider<T: Send + 'static>(&self, query: impl FnOnce(&mut ygopro::duel::Duel, &mut Anymap) -> T + Send + 'static) -> Option<T> {
+        let Some(Provider::Embedded(provider)) = self.provider.as_ref() else { return None };
+        let (sender, receiver) = oneshot::channel();
+        provider.ctos_sender.send(ygopro::duel::Request::Query(Box::new(move |duel, states| { sender.send(query(duel, states)).ok(); }))).ok()?;
+        receiver.await.ok()
     }
 }
 

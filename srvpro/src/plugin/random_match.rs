@@ -76,11 +76,15 @@ fn max_players_of(random_type: &str) -> usize {
 }
 
 async fn allocate_random_room(random_type: &str) -> String {
+    allocate_room(random_type, |random| format!("{},RANDOM#{}", random_type, random)).await
+}
+
+pub async fn allocate_room(random_type: &str, room_name_of: impl Fn(u32) -> String + Send) -> String {
     let available = WAITING_ROOMS.read().iter()
         .find(|(_, waiting_room)| waiting_room.random_type == random_type && waiting_room.players < max_players_of(random_type))
         .map(|(room_name, _)| room_name.clone());
     if let Some(room_name) = available { return room_name }
-    let room_name = format!("{},RANDOM#{}", random_type, rand::thread_rng().gen_range(0..100000));
+    let room_name = room_name_of(rand::thread_rng().gen_range(0..100000));
     WAITING_ROOMS.write().insert(room_name.clone(), WaitingRoom { random_type: random_type.to_string(), players: 0 });
     RoomHost::new(&room_name).await;
     room_name
@@ -321,10 +325,11 @@ mod no_early_surrender {
 
     #[before(ctos::Surrender)]
     #[register_to(CTOS_HANDLERS as ClientToServerHandler)]
-    fn on_surrender(random_room: &mut RandomRoom, player: &mut Player, turn: &mut Turn, stop: &mut StopFlag, configuration: Configuration) {
-        if configuration.min_surrender_turn == 0 || turn.turn >= configuration.min_surrender_turn { return }
-        if !configuration.surrender_limited_modes.0.iter().any(|mode| mode == &random_room.random_type) { return }
+    fn on_surrender(random_room: &mut RandomRoom, player: &mut Player, turn: &mut Turn, stop: &mut StopFlag, configuration: Configuration) -> &'static str {
+        if configuration.min_surrender_turn == 0 || turn.turn >= configuration.min_surrender_turn { return "continue" }
+        if !configuration.surrender_limited_modes.0.iter().any(|mode| mode == &random_room.random_type) { return "continue" }
         player.send_message(&format!("决斗开始后 {} 回合内不能投降。", configuration.min_surrender_turn), Color::Babyblue);
         stop.0 = true;
+        "cancel"
     }
 }

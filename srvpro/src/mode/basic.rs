@@ -35,9 +35,10 @@ fn single(config: &mut RoomConfiguration, part: &str) -> bool {
     } else { false }
 }
 
+// match is a keyword. we just spell wrong here to make it simple.
 #[handler(Normal, module="srvpro::core")]
 #[register_to(MODES)]
-fn _match(config: &mut RoomConfiguration, part: &str) -> bool {
+fn macth(config: &mut RoomConfiguration, part: &str) -> bool {
     if part == "M" || part == "MATCH" {
         config.hostinfo.mode = Mode::Match;
         true
