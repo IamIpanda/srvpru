@@ -1,3 +1,5 @@
+//! The `!color` command: change the color of your chat messages.
+
 use std::str::FromStr;
 
 use ygopro_data::constants::Color;
@@ -14,6 +16,7 @@ use crate::room::Room;
 use crate::room::STOC_HANDLERS;
 use crate::room::ServerToClientHandler;
 
+/// Name for activitating this module in the plugin system.
 #[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 

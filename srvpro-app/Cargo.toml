@@ -1,15 +1,20 @@
 [package]
 name = "srvpro-app"
 version = "0.1.0"
-edition = "2024"
+publish = false
+edition.workspace = true
+license-file.workspace = true
+repository.workspace = true
+description = "The srvpro server binary: wires the HTTP API in and runs the server."
+keywords = ["ygopro", "srvpro"]
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 env_logger = "0.11"
 log = "0.4"
 
-srvpro = { path = "../srvpro", default-features = false }
-srvpro-api = { path = "../srvpro-api", optional = true }
+srvpro.workspace = true
+srvpro-api = { workspace = true, optional = true }
 
 [features]
 default = ["api", "zip", "card", "forge"]

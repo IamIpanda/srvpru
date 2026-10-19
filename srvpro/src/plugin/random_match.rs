@@ -1,3 +1,5 @@
+//! Random match.
+
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::LazyLock;
@@ -21,20 +23,27 @@ use crate::mode::RoomConfiguration;
 use crate::room::*;
 
 #[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
+/// Name for activitating this module in the plugin system.
 pub static NAME: &'static str = module_path!();
 
 #[derive(Clone, Configuration)]
 #[config(sync)]
 pub struct Configuration {
+    /// Random match type used when the room password is empty.
     #[config(default = "String::from(\"S\")")]
     pub default: String,
+    /// Room password values that request a random match.
     pub modes: Modes,
+    /// Seconds a seated player may stay not-ready before being removed; `0` disables it.
     #[config(default = "90")]
     pub ready_timeout: u64,
+    /// Seconds the host may wait before starting once all seats are filled; `0` disables it.
     #[config(default = "20")]
     pub start_timeout: u64,
+    /// Earliest turn surrender is allowed; `0` disables the restriction.
     #[config(default = "3")]
     pub min_surrender_turn: u32,
+    /// Random match types the surrender restriction applies to.
     #[config(default = "Modes::from_str(\"[\\\"S\\\",\\\"T\\\"]\").unwrap()")]
     pub surrender_limited_modes: Modes,
 }
@@ -163,6 +172,7 @@ mod ready_timeout {
     use crate::room::SrvproMessageHandler;
 
     #[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
+    /// Name for activitating this module in the plugin system.
     pub static NAME: &'static str = module_path!();
 
     struct ReadyTimeout(JoinHandle<()>);
@@ -233,6 +243,7 @@ mod start_timeout {
     use crate::room::SrvproMessageHandler;
 
     #[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
+    /// Name for activitating this module in the plugin system.
     pub static NAME: &'static str = module_path!();
 
     #[derive(Attachment)]
@@ -319,6 +330,7 @@ mod no_early_surrender {
     use crate::room::ClientToServerHandler;
 
     #[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
+    /// Name for activitating this module in the plugin system.
     pub static NAME: &'static str = module_path!();
 
     register_dependencies!(crate::plugin::base::turn::NAME);

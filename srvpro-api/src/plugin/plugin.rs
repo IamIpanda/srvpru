@@ -11,6 +11,7 @@ use crate::auth;
 use crate::register_router;
 use srvpro::configuration;
 
+/// Name for activitating this module in the plugin system.
 #[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 

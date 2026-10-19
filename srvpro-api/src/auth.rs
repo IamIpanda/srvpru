@@ -158,6 +158,10 @@ fn identify(request: &Request, permission: &str) -> Result<Identity, StatusCode>
     Ok(Identity { username })
 }
 
+pub fn authorized(request: &Request, permission: &str) -> bool {
+    identify(request, permission).is_ok()
+}
+
 fn credentials(request: &Request) -> Option<(String, String)> {
     if let Some(token) = bearer(request.headers()) { return Some((String::new(), token.to_string())) }
     let credentials: Credentials = serde_urlencoded::from_str(request.uri().query()?).ok()?;

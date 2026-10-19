@@ -15,6 +15,7 @@ use crate::register_router;
 use srvpro::configuration;
 use srvpro::managers::config_manager;
 
+/// Name for activitating this module in the plugin system.
 #[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 
@@ -41,17 +42,25 @@ fn build_welcome_router() -> Router {
 }
 
 async fn get_welcome() -> Json<WelcomeResult> {
-    let welcome = config_manager::load().get(KEY).unwrap_or_default().to_string();
-    Json(WelcomeResult { message: "get ok".to_string(), payload: welcome })
+    Json(WelcomeResult { message: "get ok".to_string(), payload: current() })
+}
+
+pub(crate) fn current() -> String {
+    config_manager::load().get(KEY).unwrap_or_default().to_string()
+}
+
+pub(crate) async fn change(value: &str) -> std::io::Result<()> {
+    store(value)?;
+    config_manager::update(vec![(KEY.to_string(), value.to_string())]);
+    configuration::rebuild_and_notify(&[srvpro::plugin::welcome::NAME]).await;
+    Ok(())
 }
 
 async fn change_welcome(Json(request): Json<WelcomeRequest>) -> Result<Json<WelcomeResult>, StatusCode> {
-    if let Err(error) = store(&request.welcome) {
+    if let Err(error) = change(&request.welcome).await {
         log::error!("cannot write {FILE_NAME}.yaml: {error}");
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
-    config_manager::update(vec![(KEY.to_string(), request.welcome.clone())]);
-    configuration::rebuild_and_notify(&[srvpro::plugin::welcome::NAME]).await;
     Ok(Json(WelcomeResult { message: "welcome ok".to_string(), payload: request.welcome }))
 }
 

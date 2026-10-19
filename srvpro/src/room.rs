@@ -1,3 +1,9 @@
+//! A room actor: its players, its observers, its duel provider and its message pipeline.
+//!
+//! [`RoomHost`] owns one [`Room`] running in its own task. Every interaction with the room —
+//! client messages, provider messages, commands and configuration events — is a [`Request`]
+//! sent through the room's channel, so handlers never mutate the room concurrently.
+
 use std::mem::ManuallyDrop;
 use std::sync::LazyLock;
 
@@ -26,13 +32,17 @@ use crate::message as srvpro;
 use crate::mode::Provider;
 use crate::mode::RoomConfiguration;
 
+/// Handler states carried by a room or a player.
 pub type Anymap = anymap3::Map<dyn std::any::Any + Send>;
 
+/// Name of the built-in core plugin.
 #[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static CORE_NAME: &'static str = "srvpro::core";
 
+/// Rooms by their original name.
 pub static ROOMS: LazyLock<RwLock<HashMap<String, RoomHost>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
 
+/// Everything a room can be asked to do.
 pub enum Request {
     CTOS(Complex<ctos::Message>, usize),
     STOC(Complex<stoc::Message>, usize),
@@ -41,18 +51,30 @@ pub enum Request {
     Query(Box<dyn FnOnce(&Room, &Anymap) + Send>)
 }
 
+/// Handles one client message for a player.
 pub type ClientToServerHandler = TowerHandler<extract::Request<Complex<ctos::Message>, usize>, State, Response<ctos::Message>>;
+/// Handles a client message before it is attributed to a player.
 pub type ClientToServerPrecursorHandler = TowerHandler<Complex<ctos::Message>, Player, Response<ctos::Message>>;
+/// Handles one server message for a player.
 pub type ServerToClientHandler = TowerHandler<extract::Request<Complex<stoc::Message>, usize>, State, Response<stoc::Message>>;
+/// Handles one game message for a player.
 pub type GameMessageHandler = TowerHandler<extract::Request<Complex<gm::Message>, usize>, ManuallyDrop<State>, Response<gm::Message>>;
+/// Handles one srvpro event.
 pub type SrvproMessageHandler = TowerHandler<srvpro::Message, State, Response<srvpro::Message>>;
+/// Handles a text command sent by a player.
 pub type CommandHandler = TowerHandler<extract::Request<Box<dyn std::any::Any + Send>, ()>, State, Response<()>>;
 
+/// Client message handlers, collected at link time.
 #[distributed_slice] pub static CTOS_HANDLERS: [fn() -> (u8, ClientToServerHandler)];
+/// Client message handlers running before a player is known.
 #[distributed_slice] pub static CTOS_PREHANDLERS: [fn() -> (u8, ClientToServerPrecursorHandler)];
+/// Server message handlers, collected at link time.
 #[distributed_slice] pub static STOC_HANDLERS: [fn() -> (u8, ServerToClientHandler)];
+/// Game message handlers, collected at link time.
 #[distributed_slice] pub static GM_HANDLERS: [fn() -> (u8, GameMessageHandler)];
+/// Event handlers, collected at link time.
 #[distributed_slice] pub static SRVPRO_HANDLERS: [fn() -> (u8, SrvproMessageHandler)];
+/// Text command handlers, collected at link time.
 #[distributed_slice] pub static SRVPRO_COMMANDS: [fn() -> (&'static str, CommandHandler)];
 
 type ClientToServerPrecursorProcessor = Processor<u8, Complex<ctos::Message>, Player, Response<ctos::Message>>;
@@ -97,6 +119,7 @@ pub struct Player {
 }
 
 impl Player {
+    /// Create a player with no network attached.
     pub fn allocate() -> Self {
         let (ctos_sink, ctos_stream) = mpsc::unbounded();
         let (stoc_sink, stoc_stream) = mpsc::unbounded();
@@ -109,6 +132,7 @@ impl Player {
         }
     }
 
+    /// Create a player writing its server messages to `network_sink`.
     pub fn new(mut network_sink: impl Sink<Complex<stoc::Message>> + Unpin + Send + 'static) -> Self {
         let mut player = Self::allocate();
         let mut stoc_stream = player.server_to_client_stream_towards_network.take().unwrap();
@@ -122,6 +146,7 @@ impl Player {
         player
     }
 
+    /// Start the task reading `client_to_server_stream_from_network` into the player.
     pub fn run<S: Stream<Item = Complex<ctos::Message>> + Unpin + Send + 'static>(self, mut client_to_server_stream_from_network: S) {
         let processor = CTOS_PREPROCESSOR.load_full();
         tokio::spawn(async move {
@@ -192,6 +217,7 @@ impl ContainsMapMut for Player {
     }
 }
 
+/// The state of one room: its players, its provider and its configuration.
 pub struct Room {
     pub name: String,
     pub players: Slab<Player>,
@@ -201,6 +227,7 @@ pub struct Room {
     pub request_receiver: Option<mpsc::UnboundedReceiver<Request>>
 }
 
+/// Handler state for room-level handlers.
 pub struct State {
     pub room: Room,
     pub states: Anymap
@@ -246,6 +273,7 @@ impl<Req, Res> FromRequest<Req, ManuallyDrop<Player>, Res> for &mut Player where
     }
 }
 
+/// A handle to the room channel, available as a request extractor.
 pub struct Sender(pub mpsc::UnboundedSender<Request>);
 impl<Req, Res> FromRequest<Req, State, Res> for Sender where Req: Send, Res: Send {
     fn from_request(bundle: &mut Bundle<Req, State, Res>) -> Option<Self> {
@@ -254,6 +282,7 @@ impl<Req, Res> FromRequest<Req, State, Res> for Sender where Req: Send, Res: Sen
 }
 
 impl Room {
+    /// Create an empty room with no provider.
     pub fn new(name: String) -> Self {
         let (request_sender, request_receiver) = mpsc::unbounded();
         Self {
@@ -266,6 +295,7 @@ impl Room {
         }
     }
 
+    /// Start the room task with `configuration` and the initial handler `states`.
     pub fn run(self, configuration: Configuration, states: Anymap) -> JoinHandle<()> {
         let mut room = self;
         // Freeze the room's configuration here: the processors below are wired
@@ -458,6 +488,7 @@ async fn game_message_handler(bundle: &mut Bundle<extract::Request<Complex<stoc:
     result_bundle.response.map(|m| m.into())
 }
 
+/// A running room and the task serving it.
 pub struct RoomHost {
     pub name: String,
     pub sender: mpsc::UnboundedSender<Request>,
@@ -472,6 +503,7 @@ impl RoomHost {
         Self { name, sender: sender.clone(), handler }
     }
 
+    /// Get the room named `pass`, creating it when it does not exist.
     pub async fn new(pass: &str) -> mpsc::UnboundedSender<Request> {
         let room_configuration = RoomConfiguration::new(pass).await;
         let origin_name = room_configuration.origin_name;

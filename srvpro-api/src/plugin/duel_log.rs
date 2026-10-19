@@ -34,6 +34,7 @@ use crate::auth;
 use crate::database::CONNECTION;
 use crate::register_router;
 
+/// Name for activitating this module in the plugin system.
 pub static NAME: &'static str = module_path!();
 
 const PERMISSION: &str = "duel_log";
@@ -47,6 +48,7 @@ register_router!(DUEL_LOG_ROUTER, build_duel_log_router);
 #[derive(Clone, Configuration)]
 #[config(sync, register_to = "srvpro::plugin::CONFIGURATIONS")]
 pub struct Configuration {
+    /// Store replays inline as base64 instead of referencing their file path.
     pub always_save_replay_to_database: bool,
 }
 

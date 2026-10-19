@@ -1,3 +1,8 @@
+//! Chat commands: the registry behind the commands players type in chat.
+//!
+//! The dispatcher is registered as `srvpro::core`, so this module cannot be enabled or disabled
+//! on its own.
+
 use ygopro_data::constants::Color;
 use ygopro_data::message::ctos;
 use ygopro_handler::StopFlag;

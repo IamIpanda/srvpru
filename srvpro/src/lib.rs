@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 pub mod configuration;
 pub mod managers;
 pub mod message;
@@ -20,18 +22,27 @@ use ygopro_handler::TowerHandler;
 pub use ygopro_handler::extract::Response;
 use message as srvpro;
 
+/// The handler chain processing [`message::Message`] at the process level.
 pub type GlobalHandler = TowerHandler<srvpro::Message, (), Response<srvpro::Message>>;
 
+/// Handlers of the process-wide event loop, collected at link time.
 #[distributed_slice]
 pub static SRVPRO_GLOBAL_HANDLERS: [fn() -> (u8, GlobalHandler)];
 
-pub static GLOBAL_PROCESSOR: LazyLock<Processor<u8, srvpro::Message, (), Response<srvpro::Message>, GlobalHandler>> = LazyLock::new(|| {
+static GLOBAL_PROCESSOR: LazyLock<Processor<u8, srvpro::Message, (), Response<srvpro::Message>, GlobalHandler>> = LazyLock::new(|| {
     Processor::new_with_groups(&SRVPRO_GLOBAL_HANDLERS, &hashbrown::HashSet::new(), |handler| handler.module_name, |key| *key == 0)
 });
 
+/// Dispatch one global event through [`SRVPRO_GLOBAL_HANDLERS`].
 pub async fn process(event: srvpro::Message) -> Bundle<srvpro::Message, (), Response<srvpro::Message>> {
     let key = event.message_key();
     GLOBAL_PROCESSOR.process_bundle(Bundle::new(event, (), Response::Continue), key).await
+}
+
+/// Sends the [`message::Init`] signal.
+pub async fn init() -> bool {
+    let bundle = process(message::Init::default().into_message()).await;
+    !matches!(bundle.response, Response::Terminate)
 }
 
 #[handler(srvpro::Init)]

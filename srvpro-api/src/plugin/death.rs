@@ -1,3 +1,5 @@
+//! Start or cancel the match clock of a room over HTTP.
+
 use axum::Json;
 use axum::Router;
 use axum::extract::Query;
@@ -11,6 +13,7 @@ use crate::register_router;
 use srvpro::room::Request;
 use srvpro::room::ROOMS;
 
+/// Name for activitating this module in the plugin system.
 pub static NAME: &'static str = srvpro::plugin::death::NAME;
 
 register_router!(DEATH_ROUTER, build_death_router);
@@ -44,10 +47,13 @@ async fn cancel_death(Query(query): Query<DeathQuery>) -> Result<Json<DeathResul
     Ok(Json(DeathResult { message: "death cancel ok".to_string(), payload: query.death }))
 }
 
-fn send_command(target: &str, command: &'static str) {
+pub(crate) fn send_command(target: &str, command: &'static str) -> bool {
+    let mut found = false;
     for host in ROOMS.read().values() {
         if target == "all" || target == host.name {
             host.sender.unbounded_send(Request::Command(command, Box::new(()))).ok();
+            found = true;
         }
     }
+    found
 }

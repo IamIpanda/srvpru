@@ -1,0 +1,138 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64 api
+            os: ubuntu-latest
+            flavor: api
+            artifact: linux-x86_64
+          - name: Linux x86_64 headless
+            os: ubuntu-latest
+            flavor: headless
+            artifact: linux-x86_64
+          - name: macOS x86_64 api
+            os: macos-15-intel
+            flavor: api
+            artifact: macos-x86_64
+          - name: macOS x86_64 headless
+            os: macos-15-intel
+            flavor: headless
+            artifact: macos-x86_64
+          - name: Windows x86_64 api
+            os: windows-latest
+            flavor: api
+            artifact: windows-x86_64
+          - name: Windows x86_64 headless
+            os: windows-latest
+            flavor: headless
+            artifact: windows-x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+
+      - name: Extract cargo version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "srvpro-app") | .version')
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Build release binary
+        shell: bash
+        run: |
+          if [ "${{ matrix.flavor }}" = "headless" ]; then
+            cargo build --release -p srvpro-app --no-default-features --features zip,card,forge
+          else
+            cargo build --release -p srvpro-app
+          fi
+
+      - name: Compress binaries with UPX
+        if: runner.os != 'macOS'
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            choco install upx -y
+            UPX_COMMAND="upx"
+            BIN="target/release/srvpro-app.exe"
+          else
+            sudo apt-get update
+            sudo apt-get install -y upx-ucl
+            UPX_COMMAND="upx-ucl"
+            BIN="target/release/srvpro-app"
+          fi
+          "$UPX_COMMAND" --best "$BIN"
+
+      - name: Package executable
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            TARBALL_FILES="srvpro-app.exe"
+          else
+            TARBALL_FILES="srvpro-app"
+          fi
+          tar -czf "srvpro-${{ steps.version.outputs.version }}-${{ matrix.flavor }}-${{ matrix.artifact }}.tar.gz" -C target/release $TARBALL_FILES
+
+      - name: Upload executable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: srvpro-${{ steps.version.outputs.version }}-${{ matrix.flavor }}-${{ matrix.artifact }}
+          path: "srvpro-${{ steps.version.outputs.version }}-${{ matrix.flavor }}-${{ matrix.artifact }}.tar.gz"
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/*.tar.gz
+
+      - name: Delete previous release-latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view release-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete release-latest --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+          elif gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/release-latest" >/dev/null 2>&1; then
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/release-latest"
+          fi
+
+      - name: Publish release-latest
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: release-latest
+          name: release-latest
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          files: |
+            artifacts/**/*.tar.gz

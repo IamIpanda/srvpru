@@ -2,6 +2,15 @@
 members = ["srvpro", "srvpro-api", "srvpro-app"]
 resolver = "2"
 
+[workspace.package]
+edition = "2024"
+license-file = "LICENSE"
+repository = "https://github.com/IamIpanda/srvpru"
+
+[workspace.dependencies]
+srvpro = { path = "./srvpro", default-features = false }
+srvpro-api = { path = "./srvpro-api" }
+
 [profile.release]
 lto = true
 strip = true

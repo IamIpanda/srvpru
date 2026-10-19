@@ -1,3 +1,5 @@
+//! Summon lines: send a quote when a monster is summoned.
+
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -15,12 +17,14 @@ use crate::room::GM_HANDLERS;
 use crate::room::GameMessageHandler;
 use crate::room::Room;
 
+/// Name for activitating this module in the plugin system.
 #[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 
 #[derive(Clone, Configuration)]
 #[config(sync)]
 pub struct Configuration {
+    /// Summon lines keyed by card id.
     pub dialogues: Dialogues
 }
 

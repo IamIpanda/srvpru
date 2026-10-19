@@ -1,3 +1,5 @@
+//! Record the deck a player submits, indexed by the duel count.
+
 use ygopro_data::data::Deck;
 use ygopro_data::message::ctos;
 
@@ -7,6 +9,7 @@ use crate::room::Player;
 use crate::room::CTOS_HANDLERS;
 use crate::room::ClientToServerHandler;
 
+/// Name for activitating this module in the plugin system.
 pub static NAME: &'static str = module_path!();
 
 register_dependencies!(

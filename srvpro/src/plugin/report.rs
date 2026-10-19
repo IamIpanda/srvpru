@@ -29,6 +29,7 @@ use crate::plugin::virtual_password::OriginName;
 use crate::room::*;
 use crate::mode::*;
 
+/// Name for activitating this module in the plugin system.
 pub static NAME: &'static str = module_path!();
 
 register_dependencies!(
@@ -44,9 +45,13 @@ register_dependencies!(
 #[derive(Clone, Configuration)]
 #[config(sync)]
 pub struct Configuration {
+    /// Arena report endpoint; reporting is skipped when empty.
     pub url: String,
+    /// Access key sent with every report.
     pub access_key: String,
+    /// Arena name sent with every report.
     pub arena: String,
+    /// Replay format used for the replays attached to the report.
     #[config(default = "ygopro::plugin::replay::Format::YgoproForge")]
     pub format: Format,
 }

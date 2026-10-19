@@ -60,6 +60,7 @@ use crate::plugin::register_dependencies;
 use crate::plugin::virtual_password::OriginName;
 use crate::room::*;
 
+/// Name for activitating this module in the plugin system.
 #[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 
@@ -73,10 +74,13 @@ register_dependencies!(
 #[derive(Clone, Configuration)]
 #[config(sync)]
 pub struct Configuration {
+    /// Seconds a disconnected player's seat is held before the player is removed.
     #[config(default = "60")]
     pub wait_time: u64,
+    /// Surrender immediately when a player disconnects during a match-mode duel.
     #[config(default = "false")]
     pub auto_surrender_after_disconnect: bool,
+    /// Allow a client with the same origin name to take over a seat that is still occupied.
     #[config(default = "false")]
     pub allow_kick_reconnect: bool,
 }

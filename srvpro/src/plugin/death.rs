@@ -1,3 +1,6 @@
+//! A match clock for tournament games: when time runs out the duel continues for a few more
+//! turns, and then sudden death. 
+
 use tokio::task::JoinHandle;
 use ygopro_data::complex::Complex;
 use ygopro_data::constants::Color;
@@ -30,8 +33,10 @@ register_dependencies!(
     crate::plugin::base::position::NAME
 );
 
+/// Turns played after the match clock expires.
 #[derive(Clone)]
 pub enum QuickDeathRule {
+    /// Extra turns before the sudden death.
     Death(u8),
 }
 
@@ -44,6 +49,7 @@ impl Default for QuickDeathRule {
 #[derive(Clone, Configuration)]
 #[config(sync)]
 pub struct Configuration {
+    /// Rule applied when the match clock expires.
     #[config(not_from_env)]
     pub quick_death_rule: QuickDeathRule,
 }

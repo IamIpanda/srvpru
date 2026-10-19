@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 use srvpro::managers;
 
 use std::sync::LazyLock;
@@ -15,28 +17,34 @@ pub mod auth;
 pub mod bootstrap;
 pub mod config;
 pub mod database;
-pub mod plugins;
+pub mod plugin;
 
 #[macro_use]
 extern crate ygopro_derive;
 #[macro_use]
 extern crate linkme;
 
+/// Routers contributed by the API plugins, keyed by plugin name.
 #[distributed_slice]
 pub static SRVPRO_API_ROUTERS: [(&'static str, fn() -> Router)];
 
 #[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 
+/// HTTP API settings.
 #[derive(Clone, Configuration)]
 #[config(sync, prefix = "api", register_to = "srvpro::plugin::CONFIGURATIONS")]
 pub struct Configuration {
+    /// Port the HTTP server listens on.
     #[config(default = "7922")]
     pub port: u16,
+    /// SQLite database file holding accounts and configuration.
     #[config(default = "\"srvpro.db\".to_string()")]
     pub database: String,
+    /// Directory holding the built portal; empty disables static file serving.
     #[config(default = "\"portal\".to_string()")]
     pub static_dir: String,
+    /// Server name shown by the API.
     #[config(default = "\"Srvpru Server\".to_string()")]
     pub name: String,
 }
@@ -55,7 +63,7 @@ fn on_configuration_changed() {
     ROUTER.store(std::sync::Arc::new(build_router_from_configuration()));
 }
 
-pub async fn serve() {
+async fn serve() {
     let Some(configuration) = srvpro::configuration::get_configuration::<Configuration>() else { return };
     let port = configuration.port;
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port)).await.expect("cannot bind port");
@@ -86,6 +94,7 @@ async fn dispatch(request: Request) -> Response {
     Router::clone(&router).oneshot(request).await.expect("router service is infallible")
 }
 
+/// Register an axum router for this plugin.
 #[macro_export]
 macro_rules! register_router {
     ($name:ident, $build:path) => {

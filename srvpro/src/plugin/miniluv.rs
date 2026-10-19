@@ -1,3 +1,6 @@
+//! Safety: every abuse guard belongs here; currently it limits connections per address and drops clients
+//! that stall before joining.
+
 use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::sync::LazyLock;
@@ -21,14 +24,17 @@ use crate::message as srvpro;
 use crate::room::SrvproMessageHandler;
 use crate::room::SRVPRO_HANDLERS;
 
+/// Name for activitating this module in the plugin system.
 #[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 
 #[derive(Clone, Configuration)]
 #[config(sync)]
 pub struct Configuration {
+    /// Maximum concurrent connections per IP; `0` disables the limit.
     #[config(default = "5")]
     pub max_connections_per_ip: usize,
+    /// Seconds a client may stay connected without joining a room; `0` disables the timeout.
     #[config(default = "5")]
     pub join_timeout: u64,
 }

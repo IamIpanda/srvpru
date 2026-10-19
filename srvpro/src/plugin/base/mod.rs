@@ -1,3 +1,5 @@
+//! Base plugins: message recorders keeping the room state other plugins read.
+
 pub mod stage;
 pub mod replays;
 pub mod lp;

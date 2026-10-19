@@ -15,6 +15,7 @@ use crate::register_router;
 use srvpro::configuration;
 use srvpro::managers::config_manager;
 
+/// Name for activitating this module in the plugin system.
 pub static NAME: &'static str = srvpro::plugin::bad_words::NAME;
 
 register_router!(BAD_WORDS_ROUTER, build_bad_words_router);

@@ -119,7 +119,7 @@ no initial password is configured, created the account admin in srvpro.db with t
 
 ## HTTP API
 
-与原版 srvpro 兼容，因此原版的 dashboard 依然可以使用。我们推荐使用 UI 进行配置。
+与原版 srvpro 尽可能兼容，因此原版的 dashboard 依然可以使用。我们推荐使用 UI 进行配置。
 
 ## 工程结构
 
@@ -128,7 +128,7 @@ no initial password is configured, created the account admin in srvpro.db with t
 | `srvpro` | 服务端核心：玩家、房间、插件、游戏模式以及协议管线 |
 | `srvpro-api` | HTTP API：JWT 鉴权、账号库、插件与配置接口，以及托管后台 |
 | `srvpro-app` | 可执行文件，接上 API 并跑起服务器 |
-| `srvpro-portal` | 后台本体，Preact + Ant Design + Vite |
+| `srvpro-portal` | 站点本体，Preact + Ant Design + Vite |
 
 ## 相关工程
 

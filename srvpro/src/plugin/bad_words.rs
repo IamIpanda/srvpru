@@ -25,6 +25,7 @@ use crate::room::ClientToServerPrecursorHandler;
 use crate::room::Player;
 use crate::room::Room;
 
+/// Name for activitating this module in the plugin system.
 #[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 
@@ -35,14 +36,19 @@ register_dependencies!(
 #[derive(Clone, Configuration)]
 #[config(sync)]
 pub struct Configuration {
+    /// Whether room names (`JoinGame.pass`) are matched against the bad-word groups.
     #[config(default = "true")]
     pub check_room_name: bool,
+    /// Whether player nicknames are matched against the bad-word groups.
     #[config(default = "true")]
     pub check_player_name: bool,
+    /// Maximum accepted character count; `0` disables the length check.
     #[config(default = "0")]
     pub max_length: usize,
+    /// Action applied when a name exceeds `max_length`.
     #[config(default = "Strategy::Warn")]
     pub length_strategy: Strategy,
+    /// Bad-word groups to match against.
     pub groups: Groups,
 }
 

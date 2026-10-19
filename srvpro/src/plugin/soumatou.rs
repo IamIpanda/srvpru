@@ -41,6 +41,7 @@ use crate::room::Room;
 use crate::room::SRVPRO_HANDLERS;
 use crate::room::SrvproMessageHandler;
 
+/// Name for activitating this module in the plugin system.
 #[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 

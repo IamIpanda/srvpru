@@ -1,3 +1,5 @@
+//! Count the turns of the duel.
+
 use ygopro_data::message::gm;
 use ygopro_derive::Attachment;
 use ygopro_derive::handler;
@@ -8,6 +10,7 @@ use crate::room::GM_HANDLERS;
 use crate::room::GameMessageHandler;
 use crate::room::Player;
 
+/// Name for activitating this module in the plugin system.
 pub static NAME: &'static str = module_path!();
 
 register_dependencies!(

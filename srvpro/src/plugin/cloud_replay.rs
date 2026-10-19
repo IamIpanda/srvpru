@@ -1,3 +1,5 @@
+//! Cloud replay: watch a saved duel on the server without downloading the replay file.
+
 use std::sync::Arc;
 use std::sync::LazyLock;
 
@@ -56,6 +58,7 @@ struct CloudReplayId(String);
 #[derive(Clone, Configuration)]
 #[config(sync)]
 pub struct Configuration {
+    /// Name of the cloud replay provider to load.
     pub provider: String,
 }
 
@@ -121,7 +124,8 @@ async fn list(key: &str) -> Vec<String> {
     provider.list(key).await
 }
 
-mod file {
+/// Serve cloud replays stored on the local file system.
+pub mod file {
     use std::io::Cursor;
     use std::path::Path;
 
@@ -150,14 +154,18 @@ mod file {
     use crate::plugin::cloud_replay::CloudReplay;
     use crate::plugin::cloud_replay::Replay;
 
+    /// Name for activitating this module in the plugin system.
     pub static NAME: &'static str = module_path!();
 
     #[derive(Clone, Configuration)]
     #[config(sync)]
     pub struct Configuration {
+        /// Directory holding saved `.yrp3d` replays.
         #[config(default = "\"replays\".to_string()")]
         pub path: String,
+        /// Machine id embedded into generated replay ids to keep them unique across hosts.
         pub machine: u16,
+        /// Maximum number of replays returned by the listing.
         #[config(default = "10")]
         pub list_limit: usize,
     }
@@ -243,7 +251,8 @@ mod file {
     }
 }
 
-mod api {
+/// Serve cloud replays fetched over HTTP.
+pub mod api {
     use std::io::Cursor;
     use std::time::Duration;
 
@@ -264,13 +273,17 @@ mod api {
     use crate::plugin::cloud_replay::CloudReplay;
     use crate::plugin::cloud_replay::Replay;
 
+    /// Name for activitating this module in the plugin system.
     pub static NAME: &'static str = module_path!();
 
     #[derive(Clone, Configuration)]
     #[config(sync)]
     pub struct Configuration {
+        /// Listing URL template; `{id}` is replaced with the player's key.
         pub list_url: String,
+        /// Replay URL template; `{id}` is replaced with the requested replay id.
         pub replay_url: String,
+        /// Authorization header sent with both requests; empty sends none.
         pub auth: String,
     }
 

@@ -1,3 +1,5 @@
+//! Greet players when they connect to the server.
+
 use ygopro_data::constants::Color;
 use ygopro_data::message::ctos;
 use ygopro_derive::Configuration;
@@ -8,12 +10,14 @@ use crate::room::ClientToServerHandler;
 use crate::room::CTOS_HANDLERS;
 use crate::room::Player;
 
+/// Name for activitating this module in the plugin system.
 #[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 
 #[derive(Clone, Configuration)]
 #[config(sync)]
 pub struct Configuration {
+    /// Greeting text; each line is sent separately.
     #[config(default = "String::from(\"欢迎来到srvpru服务器。\\n如遇Bug请联系作者，感谢。\")")]
     pub message: String,
 }

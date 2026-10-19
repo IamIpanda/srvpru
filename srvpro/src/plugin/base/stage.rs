@@ -1,3 +1,5 @@
+//! Track the duel stage from the messages that move it.
+
 use ygopro_data::constants::DuelStage;
 use ygopro_data::message::gm;
 use ygopro_data::message::stoc;
@@ -10,6 +12,7 @@ use crate::room::GameMessageHandler;
 use crate::room::STOC_HANDLERS;
 use crate::room::ServerToClientHandler;
 
+/// Name for activitating this module in the plugin system.
 pub static NAME: &'static str = module_path!();
 
 #[derive(Attachment)]

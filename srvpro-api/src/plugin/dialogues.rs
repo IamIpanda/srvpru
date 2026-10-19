@@ -15,6 +15,7 @@ use crate::register_router;
 use srvpro::configuration;
 use srvpro::managers::config_manager;
 
+/// Name for activitating this module in the plugin system.
 pub static NAME: &'static str = srvpro::plugin::dialogues::NAME;
 
 register_router!(DIALOGUES_ROUTER, build_dialogues_router);

@@ -1,9 +1,13 @@
+//! Record whether a player is the host and its
+//! [`Netplayer`](ygopro_data::constants::Netplayer) from the type change message.
+
 use ygopro_data::message::stoc;
 
 use crate::room::Player;
 use crate::room::STOC_HANDLERS;
 use crate::room::ServerToClientHandler;
 
+/// Name for activitating this module in the plugin system.
 pub static NAME: &'static str = module_path!();
 
 #[handler(stoc::TypeChange)]

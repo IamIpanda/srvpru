@@ -18,12 +18,14 @@ use crate::room::Room;
 use crate::room::STOC_HANDLERS;
 use crate::room::ServerToClientHandler;
 
+/// Name for activitating this module in the plugin system.
 #[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 
 #[derive(Clone, Configuration)]
 #[config(sync)]
 pub struct Configuration {
+    /// Minutes players have to change their side deck between duels; `0` disables the timeout.
     #[config(default = "3")]
     pub side_timeout: u64,
 }

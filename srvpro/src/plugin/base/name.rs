@@ -1,9 +1,12 @@
+//! Remember the name sent in [`ctos::PlayerInfo`].
+
 use ygopro_data::message::ctos;
 
 use crate::room::Player;
 use crate::room::CTOS_HANDLERS;
 use crate::room::ClientToServerHandler;
 
+/// Name for activitating this module in the plugin system.
 pub static NAME: &'static str = module_path!();
 
 #[handler(ctos::PlayerInfo)]

@@ -1,3 +1,5 @@
+//! Record the first attacker.
+
 use ygopro_data::constants::CorePlayer;
 use ygopro_data::constants::Netplayer;
 use ygopro_data::message::ctos;

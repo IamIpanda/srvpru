@@ -1,7 +1,13 @@
 [package]
 name = "srvpro-api"
 version = "0.1.0"
-edition = "2024"
+edition.workspace = true
+license-file.workspace = true
+repository.workspace = true
+description = "HTTP API and persistence backend for the srvpro duel server."
+readme = "README.md"
+keywords = ["ygopro", "api"]
+categories = ["web-programming::http-server"]
 
 [dependencies]
 anymap3 = { version = "1", default-features = false, features = ["hashbrown"] }
@@ -25,7 +31,7 @@ serde_yaml = "0.8"
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.6", features = ["fs"] }
 
-srvpro = { path = "../srvpro" }
+srvpro = { workspace = true, default-features = true }
 ygopro-data = { version = "0", default-features = false }
 ygopro-derive = "0"
 ygopro-handler = { version = "0", default-features = false }

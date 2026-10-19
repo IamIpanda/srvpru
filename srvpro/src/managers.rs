@@ -1,3 +1,5 @@
+//! Managers shared by the server, such as the configuration file reader.
+
 pub mod config_manager {
     use std::collections::BTreeMap;
     use std::fs;
@@ -10,6 +12,7 @@ pub mod config_manager {
 
     const CONFIG_FILE_EXTENSIONS: [&str; 6] = ["json", "yml", "yaml", "toml", "conf", "ini"];
 
+    /// Entries read from `SRVPRO_CONFIG_PATH` and the `SRVPRO_*` environment.
     pub struct ConfigManager {
         entries: HashMap<String, String>,
     }
@@ -33,10 +36,12 @@ pub mod config_manager {
             config_manager
         }
 
+        /// The raw value of `key`.
         pub fn get(&self, key: &str) -> Option<&str> {
             self.entries.get(key).map(|s| s.as_str())
         }
 
+        /// Every entry whose key starts with `prefix`.
         pub fn prefixed(&self, prefix: &str) -> BTreeMap<String, String> {
             self.entries.iter().filter(|(key, _)| key.starts_with(prefix)).map(|(key, value)| (key.clone(), value.clone())).collect()
         }

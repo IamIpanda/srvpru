@@ -1,3 +1,5 @@
+//! Room list: current rooms and their players, over HTTP and WebSocket.
+
 use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::sync::LazyLock;
@@ -36,6 +38,7 @@ use srvpro::plugin::base::stage::Stage;
 use srvpro::plugin::register_dependencies;
 use srvpro::room::*;
 
+/// Name for activitating this module in the plugin system.
 #[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 
@@ -54,10 +57,13 @@ const PERMISSION: &str = "get_rooms";
 #[derive(Clone, Configuration)]
 #[config(sync, prefix = "http", register_to = "srvpro::plugin::CONFIGURATIONS")]
 pub struct Configuration {
+    /// Include player IPs in authenticated room-list responses.
     #[config(default = "true")]
     pub show_ip: bool,
+    /// Include per-player duel status in the room list.
     #[config(default = "true")]
     pub show_info: bool,
+    /// Allow unauthenticated access to the room list endpoints.
     pub public_roomlist: bool,
 }
 

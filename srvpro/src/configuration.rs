@@ -1,3 +1,8 @@
+//! Process-wide plugin configuration.
+//!
+//! The configuration is built from [`crate::message::Init`] at startup and replaced whenever
+//! a plugin is enabled or disabled at runtime.
+
 use std::sync::Arc;
 use std::sync::LazyLock;
 
@@ -5,9 +10,12 @@ use arc_swap::ArcSwap;
 
 use crate::message as srvpro;
 
+/// Configuration key listing the plugins extra enabled at startup.
 pub const ENABLE_PLUGINS_KEY: &str = "enable_plugins";
+/// Configuration key listing the plugins kept disabled at startup.
 pub const DISABLE_PLUGINS_KEY: &str = "disable_plugins";
 
+/// The enabled plugins and the configuration values they own.
 #[derive(Clone)]
 pub struct Configuration {
     pub enable_plugins: hashbrown::HashSet<String>,
@@ -15,6 +23,7 @@ pub struct Configuration {
 }
 
 impl Configuration {
+    /// An empty configuration with no plugin enabled.
     pub fn empty() -> Self {
         Self {
             enable_plugins: Default::default(),
@@ -22,6 +31,7 @@ impl Configuration {
         }
     }
 
+    /// Build a configuration from a set of plugin names.
     pub fn resolve(enable_plugins: hashbrown::HashSet<String>) -> Self {
         let mut configuration = Self::empty();
         for plugin_name in enable_plugins {
@@ -36,6 +46,7 @@ impl Configuration {
         }
     }
 
+    /// Enable a plugin and every plugin it depends on.
     pub fn enable_plugin(&mut self, plugin_name: &str) {
         if !self.enable_plugins.insert(plugin_name.to_string()) { return }
         log::debug!("Enable plugin {}", plugin_name);
@@ -49,6 +60,7 @@ impl Configuration {
         }
     }
 
+    /// Enable a plugin with an explicit configuration value.
     pub fn enable_plugin_with_configuration<PluginConfiguration>(&mut self, plugin_name: &str, configuration: PluginConfiguration) where PluginConfiguration: Clone + Send + Sync + 'static {
         self.enable_plugins.insert(plugin_name.to_string());
         self.configurations.insert(configuration);
@@ -61,11 +73,13 @@ impl Configuration {
         }
     }
 
+    /// Disable a plugin without touching the plugins that depend on it.
     pub fn disable_plugin(&mut self, plugin_name: &str) {
         self.enable_plugins.remove(plugin_name);
     }
 }
 
+/// Merge comma-separated plugin lists into [`crate::message::Init`].
 pub fn apply_plugin_lists(init: &mut srvpro::Init, enable_plugins: Option<&str>, disable_plugins: Option<&str>) {
     if let Some(list) = enable_plugins {
         init.enable_plugins.extend(list.split(',').map(str::trim).filter(|plugin_name| !plugin_name.is_empty()).map(ToString::to_string));
@@ -79,10 +93,12 @@ pub fn apply_plugin_lists(init: &mut srvpro::Init, enable_plugins: Option<&str>,
 
 static CONFIGURATION: LazyLock<ArcSwap<Configuration>> = LazyLock::new(|| ArcSwap::from_pointee(Configuration::empty()));
 
+/// The current configuration.
 pub fn get() -> Arc<Configuration> {
     CONFIGURATION.load_full()
 }
 
+/// A clone of the configuration value owned by plugin `T`.
 pub fn get_configuration<T: Clone + Send + Sync + 'static>() -> Option<T> {
     CONFIGURATION.load_full().configurations.get::<T>().cloned()
 }
@@ -96,6 +112,7 @@ async fn on_init(init: &srvpro::Init) {
     }
 }
 
+/// Enable a plugin at runtime and notify the handlers.
 pub async fn enable(plugin_name: &str) {
     CONFIGURATION.rcu(|current| {
         let mut next = (**current).clone();
@@ -106,6 +123,7 @@ pub async fn enable(plugin_name: &str) {
     crate::process(srvpro::ConfigurationChanged.into_message()).await;
 }
 
+/// Enable a plugin with a configuration value at runtime and notify the handlers.
 pub async fn enable_with_configuration<PluginConfiguration>(plugin_name: &str, configuration: PluginConfiguration) where PluginConfiguration: Clone + Send + Sync + 'static {
     CONFIGURATION.rcu(|current| {
         let mut next = (**current).clone();
@@ -116,6 +134,7 @@ pub async fn enable_with_configuration<PluginConfiguration>(plugin_name: &str, c
     crate::process(srvpro::ConfigurationChanged.into_message()).await;
 }
 
+/// Disable a plugin at runtime and notify the handlers.
 pub async fn disable(plugin_name: &str) {
     CONFIGURATION.rcu(|current| {
         let mut next = (**current).clone();

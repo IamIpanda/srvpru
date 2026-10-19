@@ -12,12 +12,14 @@ use crate::room::GameMessageHandler;
 use crate::room::GM_HANDLERS;
 use crate::room::Player;
 
+/// Name for activitating this module in the plugin system.
 #[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 
 #[derive(Clone, Configuration)]
 #[config(sync)]
 pub struct Configuration {
+    /// Retries allowed per player before being kicked; `0` disables the limit.
     #[config(default = "5")]
     pub max_retry_count: u8,
 }

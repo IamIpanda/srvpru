@@ -1,3 +1,5 @@
+//! Record the client address reported by the external address message.
+
 use ygopro_data::message::ctos;
 use ygopro_derive::handler;
 use ygopro_derive::register_to;
@@ -6,6 +8,7 @@ use crate::room::Player;
 use crate::room::CTOS_HANDLERS;
 use crate::room::ClientToServerHandler;
 
+/// Name for activitating this module in the plugin system.
 pub static NAME: &'static str = module_path!();
 
 #[handler(ctos::ExternalAddress)]

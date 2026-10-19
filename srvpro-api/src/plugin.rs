@@ -1,4 +1,7 @@
+//! HTTP endpoints contributed by the API plugins.
+
 pub mod bad_words;
+pub mod compat;
 pub mod death;
 pub mod dialogues;
 pub mod duel_log;

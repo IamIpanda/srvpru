@@ -1,3 +1,5 @@
+//! Send timed tips to rooms, plus the `!tip` command.
+
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::LazyLock;
@@ -18,16 +20,20 @@ use crate::room::Request;
 use crate::room::Room;
 use crate::room::ROOMS;
 
+/// Name for activitating this module in the plugin system.
 #[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 
 #[derive(Clone, Configuration)]
 #[config(sync)]
 pub struct Configuration {
+    /// Milliseconds between broadcast tips.
     #[config(default = "120000")]
     pub interval: u64,
+    /// Text prepended to every tip.
     #[config(default = "String::from(\"Tip: \")")]
     pub prefix: String,
+    /// Tip texts to broadcast.
     pub tips: Tips
 }
 

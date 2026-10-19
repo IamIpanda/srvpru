@@ -13,6 +13,7 @@ use crate::register_router;
 
 /// Kept separate from `srvpro::plugin::stop`: the panel has to answer while the server is running,
 /// and that plugin is off in exactly that state.
+/// Name for activitating this module in the plugin system.
 #[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 
@@ -48,14 +49,18 @@ async fn get_stop() -> Json<StopState> {
 }
 
 async fn stop(Query(query): Query<StopQuery>) -> Result<Json<StopResult>, StatusCode> {
-    if query.stop == "false" {
+    set(&query.stop).await;
+    let message = if query.stop == "false" { "start ok" } else { "stop ok" };
+    Ok(Json(StopResult { message: message.to_string(), payload: query.stop }))
+}
+
+pub(crate) async fn set(value: &str) {
+    if value == "false" {
         srvpro::configuration::disable(srvpro::plugin::stop::NAME).await;
         crate::config::set_plugin_enabled(srvpro::plugin::stop::NAME, false);
-        Ok(Json(StopResult { message: "start ok".to_string(), payload: query.stop }))
     } else {
-        srvpro::configuration::enable_with_configuration(srvpro::plugin::stop::NAME, srvpro::plugin::stop::Configuration { message: query.stop.clone() }).await;
-        if let Err(error) = crate::config::set(MESSAGE_KEY, &query.stop) { log::error!("cannot write config table: {error}"); }
+        srvpro::configuration::enable_with_configuration(srvpro::plugin::stop::NAME, srvpro::plugin::stop::Configuration { message: value.to_string() }).await;
+        if let Err(error) = crate::config::set(MESSAGE_KEY, value) { log::error!("cannot write config table: {error}"); }
         crate::config::set_plugin_enabled(srvpro::plugin::stop::NAME, true);
-        Ok(Json(StopResult { message: "stop ok".to_string(), payload: query.stop }))
     }
 }

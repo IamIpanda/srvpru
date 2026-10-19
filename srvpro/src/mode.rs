@@ -1,3 +1,9 @@
+//! srvpro's room string is `<modes>#<password>`. The modes are either the legacy compact
+//! form or comma-separated flags like `M`, `T`, `BO5` or `G`.
+//!
+//! This module is the [`ModeHandler`] architecture: the chain runs when a room is created,
+//! parses the room string and fills in everything the room needs to start.
+
 mod basic;
 pub(crate) mod common;
 mod srvpru;
@@ -26,10 +32,13 @@ use crate::message as srvpro;
 use crate::GlobalHandler;
 use crate::room::State;
 
+/// A handler that consumes a mode string, or one comma-separated part of it.
 pub type ModeHandler = SyncHandler<String, RoomConfiguration, ModeResponse>;
+/// Room name handlers, collected at link time.
 #[distributed_slice]
 pub static MODES: [fn() -> (u8, ModeHandler)];
 
+/// Whether the segment was consumed by a handler.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ModeResponse(pub bool);
 
@@ -53,8 +62,10 @@ impl ygopro_handler::IntoResponse<ModeResponse> for () {
     }
 }
 
+/// A marker mark this room is a tag duel room.
 pub struct Tag;
 
+/// Whether the room is a tag duel, available as a request extractor.
 pub struct TagFlag(pub bool);
 
 impl<Req, State, Res> FromRequest<Req, State, Res> for TagFlag
@@ -65,6 +76,7 @@ where Req: Send, State: ContainsMapMut + Send, Res: Send
     }
 }
 
+/// The netplayer sitting opposite `player` in a tag or single duel.
 pub fn opponent(tag: bool, player: Netplayer) -> Netplayer {
     match player {
         Netplayer::Player(index) => Netplayer::Player(if tag { index ^ 2 } else { index ^ 1 }),
@@ -73,6 +85,7 @@ pub fn opponent(tag: bool, player: Netplayer) -> Netplayer {
 }
 
 #[derive(Debug)]
+/// The mode handler of normal rooms.
 pub struct Normal {
     _private: (),
 }
@@ -105,6 +118,7 @@ fn on_configuration_changed() {
     MODE_PROCESSOR.store(std::sync::Arc::new(build_mode_processor()));
 }
 
+/// Which duel provider a room creates.
 #[derive(Debug, Default, Clone, Copy)]
 pub enum ProviderType {
     #[default]
@@ -112,12 +126,15 @@ pub enum ProviderType {
     Remote
 }
 
+/// The duel provider of a room, either embedded in this process or a remote ygopro binary.
 pub enum Provider {
     Embedded(DuelHost),
     Remote(YgoproBinaryProvider)
 }
 
+/// Extractor matching rooms served by an embedded duel host.
 pub struct EmbedProvider;
+/// Extractor matching rooms served by a remote ygopro binary.
 pub struct RemoteProvider;
 
 impl<Req: Send, Res: Send> FromRequest<Req, State, Res> for EmbedProvider {
@@ -152,6 +169,7 @@ impl RoomProvider<Complex<ctos::Message>, Complex<stoc::Message>> for Provider {
 }
 
 type Anymap = anymap3::Map<dyn std::any::Any + Send>;
+/// Provider settings of a room.
 #[derive(Default)]
 pub struct RoomProviderConfiguration {
     pub provider: ProviderType,
@@ -159,6 +177,7 @@ pub struct RoomProviderConfiguration {
     pub ygopru_configuration: ygopro::Configuration,
 }
 
+/// Everything a room needs: its name, its provider and the states of its handlers.
 pub struct RoomConfiguration {
     pub name: String,
     pub origin_name: String,
@@ -210,6 +229,7 @@ impl ContainsMapMut for RoomConfiguration {
 }
 
 impl RoomProviderConfiguration {
+    /// Create the provider described by this configuration.
     pub async fn create_room_provider(&mut self, name: String) -> Result<Provider, std::io::Error> {
         let hostinfo = self.hostinfo.clone();
         match self.provider {
@@ -233,6 +253,7 @@ impl RoomProviderConfiguration {
 }
 
 impl RoomConfiguration {
+    /// Build a configuration from a room name.
     pub async fn new(pass: &str) -> Self {
         Self::default().analyze_hash(pass).await
     }
@@ -259,6 +280,9 @@ impl RoomConfiguration {
     }
 }
 
+/// Parse a room name segment written as `prefix` followed by a value.
+/// 
+/// That's useful for parsing room config like `LP16000`.
 pub fn slice_with_prefix<T: std::str::FromStr>(slice: &str, prefix: &str) -> Option<T> {
     if slice.starts_with(prefix) && let Ok(v) = slice[prefix.len()..].parse() {
         Some(v)

@@ -15,11 +15,13 @@ use crate::room::CTOS_PREHANDLERS;
 use crate::room::ClientToServerPrecursorHandler;
 use crate::room::Player;
 
+/// Name for activitating this module in the plugin system.
 pub static NAME: &'static str = module_path!();
 
 #[derive(Clone, Configuration)]
 #[config(sync)]
 pub struct Configuration {
+    /// Message shown to clients when join is refused.
     pub message: String,
 }
 

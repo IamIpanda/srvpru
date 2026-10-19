@@ -6,8 +6,7 @@ extern crate srvpro_api;
 #[tokio::main]
 async fn main() {
     env_logger::init();
-    let bundle = srvpro::process(srvpro::message::Init::default().into_message()).await;
-    if matches!(bundle.response, srvpro::Response::Terminate) {
+    if !srvpro::init().await {
         log::error!("A handler reported termination in Initialization event, so application dont starts.");
         std::process::exit(1);
     }

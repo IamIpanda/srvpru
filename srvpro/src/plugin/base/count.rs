@@ -1,3 +1,5 @@
+//! Count how many duels are played.
+
 use ygopro_data::message::gm;
 use ygopro_derive::Attachment;
 use ygopro_derive::register_to;
@@ -7,6 +9,7 @@ use crate::room::Player;
 use crate::room::GM_HANDLERS;
 use crate::room::GameMessageHandler;
 
+/// Name for activitating this module in the plugin system.
 pub static NAME: &'static str = module_path!();
 
 register_dependencies!(

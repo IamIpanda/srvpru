@@ -1,3 +1,5 @@
+//! First-run setup of the account database and its default administrator.
+
 use std::fs;
 use std::path::Path;
 

@@ -1,3 +1,6 @@
+//! Virtual passwords: everything after `$` is dropped from player and room names, so several
+//! passwords open the same room.
+
 use ygopro_data::message::ctos;
 use ygopro_derive::handler;
 use ygopro_derive::register_to;
@@ -10,6 +13,7 @@ use crate::room::ClientToServerPrecursorHandler;
 use crate::room::Player;
 use crate::room::CTOS_PREHANDLERS;
 
+/// Name for activitating this module in the plugin system.
 #[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 

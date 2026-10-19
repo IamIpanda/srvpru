@@ -1,3 +1,5 @@
+//! The core plugin: seats players, creates the provider and wires the room to ygopro.
+
 use log::debug;
 use futures::StreamExt;
 

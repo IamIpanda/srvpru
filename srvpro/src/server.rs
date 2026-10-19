@@ -27,6 +27,7 @@ pub static NAME: &'static str = module_path!();
 #[derive(Clone, Configuration)]
 #[config(sync)]
 pub struct Configuration {
+    /// Port the server listens on.
     #[config(default = "7911")]
     pub port: u16,
 }

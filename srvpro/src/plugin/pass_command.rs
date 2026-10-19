@@ -1,3 +1,8 @@
+//! Commands typed as the room password, dispatched to [`PASS_COMMANDS`].
+//!
+//! The dispatcher is registered as `srvpro::core`, so this module cannot be enabled or disabled
+//! on its own.
+
 use std::mem::ManuallyDrop;
 
 use ygopro_data::complex::Complex;

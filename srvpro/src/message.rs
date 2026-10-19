@@ -1,3 +1,8 @@
+//! srvpro's own messages.
+//!
+//! They come in two kinds: process-level events dispatched by the global handler chain, and
+//! room-level events handled by the room that owns them.
+
 use ygopro_derive::Message;
 
 use ygopro_data::message::ctos;
@@ -5,6 +10,11 @@ use ygopro_data::message::stoc;
 
 use crate::room::Player;
 
+/// Initializes the server: the configuration, the plugins and the listeners all start here.
+///
+/// In theory, sending this message is all it takes to bring the whole server up.
+///
+/// Handled by the global handler chain ([`crate::SRVPRO_GLOBAL_HANDLERS`]).
 #[derive(Debug, Message)]
 #[message(srvpro, flag = 1)]
 pub struct Init {
@@ -31,22 +41,34 @@ where
     }
 }
 
+/// The configuration was replaced; handlers should reload their values.
+///
+/// Handled by the global handler chain ([`crate::SRVPRO_GLOBAL_HANDLERS`]).
 #[derive(Debug, Message)]
 #[message(srvpro, flag = 2)]
 pub struct ConfigurationChanged;
 
+/// A plugin was enabled at runtime.
+///
+/// Handled by the global handler chain ([`crate::SRVPRO_GLOBAL_HANDLERS`]).
 #[derive(Debug, Message)]
 #[message(srvpro, flag = 3)]
 pub struct PluginEnabled {
     pub module_name: String,
 }
 
+/// A plugin was disabled at runtime.
+///
+/// Handled by the global handler chain ([`crate::SRVPRO_GLOBAL_HANDLERS`]).
 #[derive(Debug, Message)]
 #[message(srvpro, flag = 4)]
 pub struct PluginDisabled {
     pub module_name: String,
 }
 
+/// A new game client connected to the server.
+///
+/// Handled by the global handler chain ([`crate::SRVPRO_GLOBAL_HANDLERS`]).
 #[derive(Debug, Message)]
 #[message(srvpro, flag = 11)]
 pub struct ClientConnect {
@@ -67,10 +89,16 @@ where
     }
 }
 
+/// A game client connection was refused before joining any room.
+///
+/// Handled by the global handler chain ([`crate::SRVPRO_GLOBAL_HANDLERS`]).
 #[derive(Debug, Message)]
 #[message(srvpro, flag = 14)]
 pub struct ClientRefused;
 
+/// A player asks to join a room; `position_sender` reports the assigned seat.
+///
+/// Handled by the room handler chain ([`crate::room::SRVPRO_HANDLERS`]).
 #[derive(Debug, Message)]
 #[message(srvpro, flag = 101)]
 pub struct PlayerJoin {
@@ -102,6 +130,9 @@ where State: Send, Res: Send,
     }
 }
 
+/// A player left the room.
+///
+/// Handled by the room handler chain ([`crate::room::SRVPRO_HANDLERS`]).
 #[derive(Debug, Message)]
 #[message(srvpro, flag = 102)]
 pub struct ClientLeave {
@@ -132,28 +163,49 @@ where State: Send, Res: Send,
     }
 }
 
+/// A player decided his room going to.
+///
+/// Never dispatched: it is stored in [`crate::room::Player::states`] to remember which room
+/// the player chose.
 #[derive(Debug, Message)]
 #[message(srvpro, flag = 109)]
 pub struct PlayerMove {
     pub room_name: String
 }
 
+/// A room is created. 
+/// 
+/// Room is an empty struct in srvpro. The real ygopro instance (provider) is not created yet.
+///
+/// Handled by the room handler chain ([`crate::room::SRVPRO_HANDLERS`]).
 #[derive(Debug, Message)]
 #[message(srvpro, flag = 110)]
 pub struct CreateRoom;
 
+/// A ygopro instance (provider) is created and ready to use.
+///
+/// Handled by the room handler chain ([`crate::room::SRVPRO_HANDLERS`]).
 #[derive(Debug, Message)]
 #[message(srvpro, flag = 111)]
 pub struct CreateProvider;
 
+/// The ygopro instance (provider) failed to start.
+///
+/// Handled by the room handler chain ([`crate::room::SRVPRO_HANDLERS`]).
 #[derive(Debug, Message)]
 #[message(srvpro, flag = 112)]
 pub struct ProviderFail;
 
+/// A duelist's life points changed.
+///
+/// Handled by the room handler chain ([`crate::room::SRVPRO_HANDLERS`]).
 #[derive(Debug, Message)]
 #[message(srvpro, flag = 150)]
 pub struct LPChanged;
 
+/// A client message injected into the room; `target` restricts it to one player.
+///
+/// Handled by the room handler chain ([`crate::room::SRVPRO_HANDLERS`]).
 #[derive(Debug, Message)]
 #[message(srvpro, flag = 201)]
 pub struct DirectCTOS {
@@ -161,6 +213,9 @@ pub struct DirectCTOS {
     pub target: Option<usize>,
 }
 
+/// A server message injected into the room; `target` restricts it to one player.
+///
+/// Handled by the room handler chain ([`crate::room::SRVPRO_HANDLERS`]).
 #[derive(Debug, Message)]
 #[message(srvpro, flag = 202)]
 pub struct DirectSTOC {
@@ -168,6 +223,9 @@ pub struct DirectSTOC {
     pub target: Option<usize>,
 }
 
+/// A plain text notice for the room.
+///
+/// Handled by the room handler chain ([`crate::room::SRVPRO_HANDLERS`]).
 #[derive(Debug, Message)]
 #[message(srvpro, flag = 203)]
 pub struct ServerMessage {
@@ -177,16 +235,23 @@ pub struct ServerMessage {
 }
 
 
+/// The ygopro instance (provider) terminated.
+///
+/// Handled by the room handler chain ([`crate::room::SRVPRO_HANDLERS`]).
 #[derive(Debug, Message)]
 #[message(srvpro, flag = 254)]
 pub struct ProviderTerminate;
 
+/// The process is asked to stop.
+///
+/// Handled by the room handler chain ([`crate::room::SRVPRO_HANDLERS`]).
 #[derive(Debug, Message)]
 #[message(srvpro, flag = 255)]
 pub struct Terminate;
 
 macro_rules! generate_enum {
     ($($message_name:ident = $message_flag:literal),*) => {
+        #[doc = "Every srvpro event, keyed by the numbers declared in `generate_enum!`."]
         #[derive(Debug)]
         pub enum Message {
             $($message_name($message_name)),*

@@ -1,7 +1,12 @@
 [package]
 name = "srvpro"
 version = "0.1.0"
-edition = "2024"
+edition.workspace = true
+license-file.workspace = true
+repository.workspace = true
+description = "A Rust rewrite of the srvpro YGOPro duel server."
+readme = "README.md"
+keywords = ["ygopro", "srvpro"]
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }

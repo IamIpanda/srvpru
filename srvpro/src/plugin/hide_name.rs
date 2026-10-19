@@ -1,3 +1,5 @@
+//! Hide player names during the duel.
+
 use std::str::FromStr;
 
 use hashbrown::HashMap;
@@ -15,6 +17,7 @@ use crate::room::Room;
 use crate::room::STOC_HANDLERS;
 use crate::room::ServerToClientHandler;
 
+/// Name for activitating this module in the plugin system.
 pub static NAME: &'static str = module_path!();
 
 register_dependencies!(
@@ -24,14 +27,19 @@ register_dependencies!(
 #[derive(Clone, Configuration)]
 #[config(sync)]
 pub struct Configuration {
+    /// Whether and how other players' names are hidden during the duel start stage.
     pub mode: HideNameMode,
 }
 
+/// Whether other players' names are hidden during the duel start stage.
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum HideNameMode {
+    /// Names stay visible.
     #[default]
     Disabled,
+    /// Names are hidden until the duel starts.
     Start,
+    /// Names stay hidden.
     Always,
 }
 
@@ -48,9 +56,8 @@ impl FromStr for HideNameMode {
 }
 
 impl Configuration {
-    fn should_mask(&self, room: &Room, index: usize, player_enter: &stoc::HsPlayerEnter, stage: &Stage) -> bool {
+    fn should_mask(&self, index: usize, player_enter: &stoc::HsPlayerEnter, stage: &Stage) -> bool {
         if self.mode == HideNameMode::Disabled { return false }
-        if !is_random_room(&room.name) { return false }
         if stage.stage != DuelStage::Begin { return false }
         let pos = u8::from(player_enter.pos);
         if pos >= 4 { return false }
@@ -67,11 +74,11 @@ struct HideNameState {
 
 #[handler(stoc::HsPlayerEnter)]
 #[register_to(STOC_HANDLERS as ServerToClientHandler)]
-fn on_hs_player_enter(room: &mut Room, index: usize, player_enter: &stoc::HsPlayerEnter, stage: &mut Stage, state: &mut HideNameState, configuration: Configuration) -> Option<stoc::HsPlayerEnter> {
+fn on_hs_player_enter(index: usize, player_enter: &stoc::HsPlayerEnter, stage: &mut Stage, state: &mut HideNameState, configuration: Configuration) -> Option<stoc::HsPlayerEnter> {
     if let Netplayer::Player(pos) = player_enter.pos {
         state.names.insert(pos, player_enter.name.to_string());
     }
-    if configuration.should_mask(room, index, player_enter, stage) {
+    if configuration.should_mask(index, player_enter, stage) {
         let masked = format!("Player {}", u8::from(player_enter.pos) + 1);
         Some(stoc::HsPlayerEnter { name: masked.into(), pos: player_enter.pos })
     } else {
@@ -89,8 +96,4 @@ fn on_duel_start(room: &mut Room, stage: &mut Stage, state: &mut HideNameState, 
     for (pos, name) in &state.names {
         room.broadcast(stoc::HsPlayerEnter { name: name.clone().into(), pos: Netplayer::Player(*pos) }.into());
     }
-}
-
-fn is_random_room(name: &str) -> bool {
-    name.contains("RANDOM")
 }

@@ -1,3 +1,5 @@
+//! Announce the low-life-point messages when a player is damaged or pays a cost.
+
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -13,6 +15,7 @@ use crate::room::GM_HANDLERS;
 use crate::room::GameMessageHandler;
 use crate::room::Room;
 
+/// Name for activitating this module in the plugin system.
 #[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 
@@ -34,8 +37,10 @@ impl FromStr for Message {
 #[derive(Clone, Configuration)]
 #[config(sync)]
 pub struct Configuration {
+    /// Line broadcast when a player's LP drops into the low range after damage.
     #[config(default = "Message::from_str(\"你的生命已经如风中残烛了！\").unwrap()")]
     pub lp_low_message_when_damaged: Message,
+    /// Line broadcast when a player's LP drops into the low range after paying a cost.
     #[config(default = "Message::from_str(\"背水一战！\").unwrap()")]
     pub lp_low_message_when_paid_cost: Message,
 }

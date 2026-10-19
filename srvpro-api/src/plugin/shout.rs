@@ -16,6 +16,7 @@ use srvpro::message as srvpro_message;
 use srvpro::room::Request;
 use srvpro::room::ROOMS;
 
+/// Name for activitating this module in the plugin system.
 #[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 
@@ -39,9 +40,13 @@ fn build_shout_router() -> Router {
 }
 
 async fn shout(Query(query): Query<ShoutQuery>) -> Result<Json<ShoutResult>, StatusCode> {
-    let chat = stoc::Chat { player: Color::Yellow.into(), msg: query.shout.as_str().into() };
+    broadcast(&query.shout);
+    Ok(Json(ShoutResult { message: "shout ok".to_string(), payload: query.shout }))
+}
+
+pub(crate) fn broadcast(message: &str) {
+    let chat = stoc::Chat { player: Color::Yellow.into(), msg: message.into() };
     for host in ROOMS.read().values() {
         host.sender.unbounded_send(Request::Ex(srvpro_message::DirectSTOC { message: chat.clone().into(), target: None }.into(), 0)).ok();
     }
-    Ok(Json(ShoutResult { message: "shout ok".to_string(), payload: query.shout }))
 }
