@@ -61,7 +61,10 @@ fn tag(config: &mut RoomConfiguration, part: &str) -> bool {
 fn ocg(config: &mut RoomConfiguration, part: &str) -> bool {
     if part == "OCGONLY" || part == "OO" {
         config.hostinfo.rule = Rule::OCG;
-        config.hostinfo.lflist = 0;
+        let deck_manager = ygopro::managers::deck_manager::load();
+        if let Some(lflist) = deck_manager.lflists.iter().find(|lflist| !lflist.name.contains("TCG")) {
+            config.hostinfo.lflist = lflist.hash;
+        }
         true
     } else { false }
 }
@@ -81,7 +84,7 @@ fn tcg(config: &mut RoomConfiguration, part: &str) -> bool {
     if part == "TCGONLY" || part == "TO" {
         config.hostinfo.rule = Rule::TCG;
         let deck_manager = ygopro::managers::deck_manager::load();
-        if let Some(lflist) = deck_manager.lflists.iter().find(|lflist| lflist.name.starts_with("TCG")) {
+        if let Some(lflist) = deck_manager.lflists.iter().find(|lflist| lflist.name.contains("TCG")) {
             config.hostinfo.lflist = lflist.hash;
         }
         true
@@ -184,9 +187,10 @@ fn draw(config: &mut RoomConfiguration, part: &str) -> bool {
 fn lflist(config: &mut RoomConfiguration, part: &str) -> bool {
     if let Some(lflist) = slice_with_prefix::<u32>(part, "LFLIST").or(slice_with_prefix(part, "LF")) {
         let deck_manager = ygopro::managers::deck_manager::load();
-        if let Some(lflist) = deck_manager.get_lflist_by_index(lflist) {
-            config.hostinfo.lflist = lflist.hash;
-        }
+        config.hostinfo.lflist = lflist.checked_sub(1)
+            .and_then(|index| deck_manager.get_lflist_by_index(index))
+            .map(|lflist| lflist.hash)
+            .unwrap_or(0);
         true
     } else { false }
 }

@@ -67,6 +67,7 @@ async fn on_join_game_create(room: &mut Room, states: &mut Anymap) {
     if let Ok(mut provider) = provider_configuration.create_room_provider(room.name.clone()).await {
         // we directly set hostinfo and provider here.
         // removing provider configuration is just for stopping fucking code agent (deepseek, I MEAN YOU!) extracting it.
+        let hostinfo = provider.host_info().await.unwrap_or(hostinfo);
         states.insert(hostinfo);
         states.insert(provider_type);
         states.remove::<RoomProviderConfiguration>();

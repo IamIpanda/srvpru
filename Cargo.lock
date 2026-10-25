@@ -564,7 +564,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1694,6 +1694,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
+name = "slotmap"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bdd58c3c93c3d278ca835519292445cb4b0d4dc59ccfdf7ceadaab3f8aeb4038"
+dependencies = [
+ "version_check",
+]
+
+[[package]]
 name = "smallvec"
 version = "1.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1723,7 +1732,7 @@ dependencies = [
 
 [[package]]
 name = "srvpro"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aho-corasick",
  "anymap3",
@@ -1761,7 +1770,7 @@ dependencies = [
 
 [[package]]
 name = "srvpro-api"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anymap3",
  "arc-swap",
@@ -1780,6 +1789,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "serde_yaml",
+ "slotmap",
  "srvpro",
  "tokio",
  "tower",
@@ -2293,7 +2303,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2469,7 +2479,7 @@ dependencies = [
 
 [[package]]
 name = "ygopro"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "anymap3",
  "arc-swap",
@@ -2513,7 +2523,7 @@ dependencies = [
 
 [[package]]
 name = "ygopro-data"
-version = "0.1.4"
+version = "0.1.6"
 dependencies = [
  "binrw",
  "bitflags 2.13.1",
@@ -2524,6 +2534,7 @@ dependencies = [
  "modular-bitfield",
  "num_enum",
  "rusqlite",
+ "slotmap",
  "syn 1.0.109",
  "thiserror 1.0.69",
  "ygopro-derive",

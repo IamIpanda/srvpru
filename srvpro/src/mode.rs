@@ -5,7 +5,7 @@
 //! parses the room string and fills in everything the room needs to start.
 
 mod basic;
-pub(crate) mod common;
+pub mod common;
 mod srvpru;
 
 use std::future::Future;
@@ -16,7 +16,10 @@ use std::sync::LazyLock;
 
 use ygopro::host::DuelHost;
 use ygopro_data::complex::Complex;
+use ygopro_data::constants::MasterRule;
+use ygopro_data::constants::Mode;
 use ygopro_data::constants::Netplayer;
+use ygopro_data::constants::Rule;
 use ygopro_data::message::HostInfo;
 use ygopro_data::message::{ctos, stoc};
 use ygopro_external_server_bridge::YgoproBinaryFactory;
@@ -132,6 +135,16 @@ pub enum Provider {
     Remote(YgoproBinaryProvider)
 }
 
+impl Provider {
+    pub async fn host_info(&self) -> Option<HostInfo> {
+        let Provider::Embedded(host) = self else { return None };
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        let query = move |duel: &mut ygopro::duel::Duel, _: &mut anymap3::Map<dyn std::any::Any + Send>| { sender.send(duel.host_info.clone()).ok(); };
+        host.ctos_sender.send(ygopro::duel::Request::Query(Box::new(query))).ok()?;
+        receiver.await.ok()
+    }
+}
+
 /// Extractor matching rooms served by an embedded duel host.
 pub struct EmbedProvider;
 /// Extractor matching rooms served by a remote ygopro binary.
@@ -175,6 +188,37 @@ pub struct RoomProviderConfiguration {
     pub provider: ProviderType,
     pub hostinfo: HostInfo,
     pub ygopru_configuration: ygopro::Configuration,
+}
+
+#[distributed_slice(crate::plugin::SRVPRO_CONFIGURATIONS)]
+static HOST_INFO: (&'static str, crate::plugin::InitConfiguration) = (crate::room::CORE_NAME, load_host_info_from_config);
+
+fn load_host_info_from_config(configurations: &mut anymap3::Map<dyn anymap3::CloneAny + Send + Sync>) -> Result<(), Box<dyn std::error::Error>> {
+    let config_manager = crate::managers::config_manager::load();
+    let deck_manager = ygopro::managers::deck_manager::load();
+    let mut host_info = HostInfo::default();
+    if let Some(rule) = config_manager.get("hostinfo_rule").and_then(|value| value.parse::<u8>().ok()).and_then(|value| Rule::try_from(value).ok()) { host_info.rule = rule; }
+    if let Some(mode) = config_manager.get("hostinfo_mode").and_then(|value| value.parse::<u8>().ok()).and_then(|value| Mode::try_from(value).ok()) { host_info.mode = mode; }
+    if let Some(duel_rule) = config_manager.get("hostinfo_duel_rule").and_then(|value| value.parse::<u8>().ok()).and_then(|value| MasterRule::try_from(value).ok()) { host_info.duel_rule = duel_rule; }
+    if let Some(start_lp) = config_manager.get("hostinfo_start_lp").and_then(|value| value.parse().ok()) { host_info.start_lp = start_lp; }
+    if let Some(start_hand) = config_manager.get("hostinfo_start_hand").and_then(|value| value.parse().ok()) { host_info.start_hand = start_hand; }
+    if let Some(draw_count) = config_manager.get("hostinfo_draw_count").and_then(|value| value.parse().ok()) { host_info.draw_count = draw_count; }
+    if let Some(time_limit) = config_manager.get("hostinfo_time_limit").and_then(|value| value.parse().ok()) { host_info.time_limit = time_limit; }
+    if let Some(no_check_deck) = config_manager.get("hostinfo_no_check_deck").map(flag) { host_info.no_check_deck = no_check_deck; }
+    if let Some(no_shuffle_deck) = config_manager.get("hostinfo_no_shuffle_deck").map(flag) { host_info.no_shuffle_deck = no_shuffle_deck; }
+    host_info.lflist = match config_manager.get("hostinfo_lflist") {
+        Some(name) => deck_manager.lflists.iter().find(|lflist| lflist.name == name).map(|lflist: &ygopro_data::data::LFList| lflist.hash).unwrap_or_else(|| {
+            log::warn!("unknown hostinfo_lflist {name}");
+            0
+        }),
+        None => deck_manager.lflists.first().map(|lflist| lflist.hash).unwrap_or(0),
+    };
+    configurations.insert(host_info);
+    Ok(())
+}
+
+fn flag(value: &str) -> bool {
+    matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on")
 }
 
 /// Everything a room needs: its name, its provider and the states of its handlers.
@@ -255,7 +299,10 @@ impl RoomProviderConfiguration {
 impl RoomConfiguration {
     /// Build a configuration from a room name.
     pub async fn new(pass: &str) -> Self {
-        Self::default().analyze_hash(pass).await
+        let mut this = Self::default();
+        let host_info = this.srvpro_configuration.configurations.get::<HostInfo>().cloned();
+        if let Some(host_info) = host_info { this.provider_configuration.hostinfo = host_info; }
+        this.analyze_hash(pass).await
     }
 
     async fn analyze_hash(mut self, pass: &str) -> Self {

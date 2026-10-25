@@ -1,6 +1,6 @@
 [package]
 name = "srvpro"
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 license-file.workspace = true
 repository.workspace = true
@@ -45,7 +45,8 @@ ygopro-external-server-bridge = "0"
 ygopro-handler = { version = "0", default-features = false }
 
 [features]
-default = ["zip", "card", "forge"]
+default = ["zip", "card", "forge", "field"]
 zip = ["ygopro/zip"]
 card = ["ygopro/card"]
 forge = ["ygopro/forge"]
+field = ["ygopro-data/field"]

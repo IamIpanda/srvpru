@@ -7,6 +7,7 @@ pub mod mode;
 pub mod plugin;
 pub mod room;
 pub mod server;
+pub mod windbot;
 
 #[macro_use]
 extern crate linkme;
@@ -45,7 +46,7 @@ pub async fn init() -> bool {
     !matches!(bundle.response, Response::Terminate)
 }
 
-#[handler(srvpro::Init)]
+#[handler(srvpro::Init, priority = 20)]
 #[register_to(SRVPRO_GLOBAL_HANDLERS as GlobalHandler)]
 fn on_init() {
     ygopro::init();

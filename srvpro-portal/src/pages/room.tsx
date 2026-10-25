@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'preact/hooks'
-import { NotificationOutlined, PauseOutlined, PlayCircleOutlined, RedoOutlined, ReloadOutlined, SettingOutlined, StopOutlined } from '@ant-design/icons'
+import { BugOutlined, NotificationOutlined, PauseOutlined, PlayCircleOutlined, RedoOutlined, ReloadOutlined, SettingOutlined, StopOutlined } from '@ant-design/icons'
 import { App as AntdApp, Button, Card, Empty, Input, Modal, Space, Table, Tag, Tooltip } from 'antd'
 import type { TableColumnsType } from 'antd'
-import { configs, list_duel_logs, shout, start, stop, stop_state } from '../api'
+import { configs, list_duel_logs, room_field, shout, start, stop, stop_state } from '../api'
 import type { DuelLog } from '../api'
 import { SettingsModal } from '../components/settings-modal'
 import { apply_room_event, watch_rooms } from '../roomlist'
@@ -34,6 +34,7 @@ type Row = {
   score: string
   time: string
   needpass: boolean
+  room?: string
 }
 
 function room_row(room: Room): Row {
@@ -44,6 +45,7 @@ function room_row(room: Room): Row {
     score: score_of(room),
     time: '-',
     needpass: room.needpass === 'true',
+    room: room.roomname,
   }
 }
 
@@ -103,22 +105,30 @@ function TextDialog({ title, placeholder, danger = false, run, on_success, on_cl
   )
 }
 
-const columns: TableColumnsType<Row> = [
-  {
-    title: '名称',
-    dataIndex: 'name',
-    render: (name: string, row) => (
-      <Space size={4}>
-        {name}
-        {row.needpass && <Tag color="orange">密码</Tag>}
-      </Space>
-    ),
-  },
-  { title: '玩家', dataIndex: 'players' },
-  { title: '比分', width: 100, dataIndex: 'score' },
-  { title: '时间', width: 180, dataIndex: 'time' },
-  { title: '操作', width: 160, render: () => null },
-]
+function columns_of(show_field: (room: string) => void): TableColumnsType<Row> {
+  return [
+    {
+      title: '名称',
+      dataIndex: 'name',
+      render: (name: string, row) => (
+        <Space size={4}>
+          {name}
+          {row.needpass && <Tag color="orange">密码</Tag>}
+        </Space>
+      ),
+    },
+    { title: '玩家', dataIndex: 'players' },
+    { title: '比分', width: 100, dataIndex: 'score' },
+    { title: '时间', width: 180, dataIndex: 'time' },
+    {
+      title: '操作',
+      width: 160,
+      render: (_, row) => row.room && (
+        <Tooltip title="输出 field"><Button type="text" icon={<BugOutlined />} onClick={() => show_field(row.room!)} /></Tooltip>
+      ),
+    },
+  ]
+}
 
 export function Room() {
   const [rooms, set_rooms] = useState<Room[]>([])
@@ -154,6 +164,14 @@ export function Room() {
 
   const close_dialog = () => set_dialog('')
 
+  const show_field = async (room: string) => {
+    try {
+      console.log(`field of ${room}`, await room_field(room))
+    } catch (failure) {
+      message.error(failure instanceof Error ? failure.message : '无法获取房间 field')
+    }
+  }
+
   const open_server = async () => {
     set_opening(true)
     try {
@@ -184,7 +202,7 @@ export function Room() {
           </Space>
         }
       >
-        <Table columns={columns} dataSource={[...rooms.map(room_row), ...logs.map(log_row)]} rowKey="key" pagination={{ pageSize: 10 }} size="middle" locale={{ emptyText: <Empty /> }} />
+        <Table columns={columns_of(show_field)} dataSource={[...rooms.map(room_row), ...logs.map(log_row)]} rowKey="key" pagination={{ pageSize: 10 }} size="middle" locale={{ emptyText: <Empty /> }} />
       </Card>
       {dialog === 'shout' && <TextDialog title="广播" placeholder="广播给所有房间的内容" run={shout} on_close={close_dialog} />}
       {dialog === 'stop' && <TextDialog danger title="停服" placeholder="停服提示，玩家加入时可见" run={stop} on_success={() => set_stopped(true)} on_close={close_dialog} />}

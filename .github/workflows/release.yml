@@ -63,7 +63,7 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.flavor }}" = "headless" ]; then
-            cargo build --release -p srvpro-app --no-default-features --features zip,card,forge
+            cargo build --release -p srvpro-app --no-default-features --features zip,card,forge,field
           else
             cargo build --release -p srvpro-app
           fi

@@ -57,6 +57,10 @@ export function stop_state(): Promise<StopState> {
   return get('/api/getstop', {})
 }
 
+export function room_field(room: string): Promise<unknown> {
+  return fetch_json(`/api/field/${encodeURIComponent(room)}`)
+}
+
 export function configs(prefix: string): Promise<Record<string, string>> {
   return get('/api/config', { prefix })
 }

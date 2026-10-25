@@ -7,7 +7,6 @@ use ygopro_handler::All;
 
 use crate::mode::MODES;
 use crate::mode::ModeHandler as Handler;
-use crate::mode::Normal;
 use crate::mode::RoomConfiguration;
 use crate::plugin::register_dependencies;
 
@@ -18,16 +17,57 @@ register_dependencies!(crate::plugin::base::stage::NAME);
 
 pub(crate) use no_watch::NoWatch;
 
-#[handler(Normal)]
-#[register_to(MODES)]
-fn genesys(config: &mut RoomConfiguration, part: &str) -> bool {
-    if part == "G" || part == "GENESYS" {
-        let deck_manager = ygopro::managers::deck_manager::load();
-        if let Some(lflist) = deck_manager.lflists.iter().find(|lflist| lflist.name.starts_with("genesys")) {
+pub mod genesys {
+    use ygopro::duel::Duel;
+    use ygopro::managers::deck_manager;
+    use ygopro::plugin::preload_script;
+    use ygopro::ygopro_handlers::HandlerEx;
+    use ygopro::ygopro_handlers::YGOPRO_HANDLERS_EX;
+    use ygopro_data::constants::Type;
+    use ygopro_data::data::DeckError;
+    use ygopro_data::data::DeckErrorType;
+    use ygopro_derive::before;
+    use ygopro_derive::handler;
+    use ygopro_derive::register_to;
+
+    use crate::mode::MODES;
+    use crate::mode::ModeHandler as Handler;
+    use crate::mode::Normal;
+    use crate::mode::RoomConfiguration;
+
+    pub static NAME: &'static str = module_path!();
+
+    const SPECIAL_SCRIPT: &str = "./script/special_genesys.lua";
+
+    #[handler(Normal, module = "srvpro::mode::common")]
+    #[register_to(MODES)]
+    fn genesys(config: &mut RoomConfiguration, part: &str) -> bool {
+        if part != "G" && part != "GENESYS" { return false }
+        let deck_manager = deck_manager::load();
+        if let Some(lflist) = deck_manager.lflists.iter().find(|lflist| lflist.name.contains("genesys")) {
             config.hostinfo.lflist = lflist.hash;
         }
+        config.ygopru_configuration.enable_plugin(NAME);
+        config.ygopru_configuration.enable_plugin_with_inited::<preload_script::Configuration>(preload_script::NAME, |configuration| {
+            let scripts = &mut configuration.into_mut().preloaded_scripts;
+            if !scripts.iter().any(|script| script == SPECIAL_SCRIPT) { scripts.push(SPECIAL_SCRIPT.to_string()); }
+        });
         true
-    } else { false }
+    }
+
+    #[before(ygopro::message::ValidateDeck, priority = 10)]
+    #[register_to(YGOPRO_HANDLERS_EX as HandlerEx)]
+    fn forbid_pendulum_and_link(duel: &mut Duel, validate_deck: &ygopro::message::ValidateDeck) {
+        if duel.get(validate_deck.player).is_none_or(|player| player.deck_error.is_some()) { return }
+        let data_manager = ygopro::managers::data_manager::load_full();
+        let deck = &validate_deck.deck;
+        if let Some(player) = duel.get_mut(validate_deck.player) {
+            player.deck_error = deck.iter()
+                .filter_map(|&code| data_manager.get_card(code))
+                .find(|card| card.card_type.intersects(Type::Pendulum | Type::Link))
+                .map(|card| DeckError::new().with_error_type(DeckErrorType::NotAvailable).with_code(card.code));
+        }
+    }
 }
 
 #[handler(All, module = "srvpro::mode::common")]

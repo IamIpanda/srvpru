@@ -17,8 +17,9 @@ srvpro.workspace = true
 srvpro-api = { workspace = true, optional = true }
 
 [features]
-default = ["api", "zip", "card", "forge"]
+default = ["api", "zip", "card", "forge", "field"]
 api = ["dep:srvpro-api"]
 zip = ["srvpro/zip"]
 card = ["srvpro/card"]
 forge = ["srvpro/forge"]
+field = ["srvpro/field"]
