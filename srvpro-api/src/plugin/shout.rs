@@ -8,10 +8,8 @@ use axum::routing::get;
 use serde::Deserialize;
 use serde::Serialize;
 use ygopro_data::constants::Color;
-use ygopro_data::message::stoc;
 
 use crate::auth;
-use crate::register_router;
 use srvpro::message as srvpro_message;
 use srvpro::room::Request;
 use srvpro::room::ROOMS;
@@ -19,8 +17,6 @@ use srvpro::room::ROOMS;
 /// Name for activitating this module in the plugin system.
 #[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
-
-register_router!(SHOUT_ROUTER, build_shout_router);
 
 const PERMISSION: &str = "shout";
 
@@ -35,6 +31,7 @@ struct ShoutResult {
     payload: String,
 }
 
+#[api]
 fn build_shout_router() -> Router {
     auth::required(PERMISSION, Router::new().route("/api/shout", get(shout)))
 }
@@ -45,8 +42,7 @@ async fn shout(Query(query): Query<ShoutQuery>) -> Result<Json<ShoutResult>, Sta
 }
 
 pub(crate) fn broadcast(message: &str) {
-    let chat = stoc::Chat { player: Color::Yellow.into(), msg: message.into() };
     for host in ROOMS.read().values() {
-        host.sender.unbounded_send(Request::Ex(srvpro_message::DirectSTOC { message: chat.clone().into(), target: None }.into(), 0)).ok();
+        host.sender.unbounded_send(Request::Ex(srvpro_message::ServerMessage { color: Color::Yellow, message: message.to_string(), target: None }.into(), 0)).ok();
     }
 }

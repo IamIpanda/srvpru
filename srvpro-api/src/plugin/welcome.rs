@@ -11,15 +11,8 @@ use serde::Serialize;
 
 use crate::auth;
 use crate::config;
-use crate::register_router;
 use srvpro::configuration;
 use srvpro::managers::config_manager;
-
-/// Name for activitating this module in the plugin system.
-#[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
-pub static NAME: &'static str = module_path!();
-
-register_router!(WELCOME_ROUTER, build_welcome_router);
 
 const PERMISSION: &str = "change_settings";
 const FILE_NAME: &str = "welcome";
@@ -37,6 +30,7 @@ struct WelcomeResult {
     payload: String,
 }
 
+#[api(srvpro::plugin::welcome::NAME)]
 fn build_welcome_router() -> Router {
     auth::required(PERMISSION, Router::new().route("/api/welcome", get(get_welcome).post(change_welcome)))
 }

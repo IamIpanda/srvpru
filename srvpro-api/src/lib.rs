@@ -28,6 +28,10 @@ extern crate linkme;
 #[distributed_slice]
 pub static SRVPRO_API_ROUTERS: [(&'static str, fn() -> Router)];
 
+/// Routers mounted no matter which plugins are enabled.
+#[distributed_slice]
+pub static SRVPRO_API_GLOBAL_ROUTERS: [fn() -> Router];
+
 #[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 
@@ -57,7 +61,7 @@ fn on_init() {
     tokio::spawn(serve());
 }
 
-#[handler(srvpro::message::ConfigurationChanged)]
+#[after(srvpro::message::ConfigurationChanged)]
 #[register_to(srvpro::SRVPRO_GLOBAL_HANDLERS as srvpro::GlobalHandler)]
 fn on_configuration_changed() {
     ROUTER.store(std::sync::Arc::new(build_router_from_configuration()));
@@ -78,13 +82,8 @@ fn build_router_from_configuration() -> Router {
 }
 
 fn build_router(enabled_plugins: &hashbrown::HashSet<String>, static_dir: &str) -> Router {
-    let router = SRVPRO_API_ROUTERS.iter().fold(Router::new(), |router, (plugin, build)| {
-        if enabled_plugins.contains(*plugin) {
-            router.merge(build())
-        } else {
-            router
-        }
-    });
+    let enabled = SRVPRO_API_ROUTERS.iter().filter(|(plugin, _)| enabled_plugins.contains(*plugin)).map(|(_, build)| build);
+    let router = SRVPRO_API_GLOBAL_ROUTERS.iter().chain(enabled).fold(Router::new(), |router, build| router.merge(build()));
     if static_dir.is_empty() { return router }
     router.fallback_service(ServeDir::new(static_dir).not_found_service(ServeFile::new(format!("{static_dir}/index.html"))))
 }
@@ -92,13 +91,4 @@ fn build_router(enabled_plugins: &hashbrown::HashSet<String>, static_dir: &str) 
 async fn dispatch(request: Request) -> Response {
     let router = ROUTER.load_full();
     Router::clone(&router).oneshot(request).await.expect("router service is infallible")
-}
-
-/// Register an axum router for this plugin.
-#[macro_export]
-macro_rules! register_router {
-    ($name:ident, $build:path) => {
-        #[::linkme::distributed_slice($crate::SRVPRO_API_ROUTERS)]
-        static $name: (&'static str, fn() -> ::axum::Router) = (NAME, $build);
-    };
 }

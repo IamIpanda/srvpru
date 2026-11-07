@@ -13,14 +13,11 @@ use serde::Serialize;
 
 use crate::auth;
 use crate::database;
-use crate::register_router;
 use srvpro::configuration;
 use srvpro::managers::config_manager;
 
 #[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
-
-register_router!(CONFIG_ROUTER, build_config_router);
 
 const PERMISSION: &str = "change_settings";
 const API_ENABLED_PLUGINS_KEY: &str = "api_enabled_plugins";
@@ -55,6 +52,7 @@ struct DeleteConfigResult {
     key: String,
 }
 
+#[api]
 fn build_config_router() -> Router {
     auth::required(PERMISSION, Router::new()
         .route("/api/config", get(get_configs).post(set_config).delete(delete_config)))

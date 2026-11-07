@@ -1,4 +1,6 @@
 use std::net::SocketAddr;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use std::os::fd::AsRawFd;
 use std::sync::LazyLock;
 
 use futures::SinkExt;
@@ -64,6 +66,8 @@ fn wrap_in_complex(frame: bytes::BytesMut) -> Complex<ctos::Message> {
 }
 
 fn handle_connection(socket: tokio::net::TcpStream, addr: SocketAddr) {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    let fd = socket.as_raw_fd();
     let (reader, writer) = socket.into_split();
     let framed_read = FramedRead::new(reader, CODEC.clone());
     let framed_write = FramedWrite::new(writer, CODEC.clone());
@@ -74,6 +78,8 @@ fn handle_connection(socket: tokio::net::TcpStream, addr: SocketAddr) {
     let stoc_sink = Box::pin(framed_write.with(|message: Complex<stoc::Message>| async move { Ok::<_, std::io::Error>(message.data) }));
     let mut player = Player::new(stoc_sink);
     player.states.insert(addr);
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    player.states.insert(fd);
     player.run(ctos_stream);
 }
 

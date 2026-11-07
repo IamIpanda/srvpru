@@ -58,7 +58,7 @@ pub struct Configuration {
 
 #[derive(Attachment)]
 pub struct StartTime {
-    pub start: DateTime<Local>,
+    pub start: Option<DateTime<Local>>,
 }
 
 pub struct Report {
@@ -97,7 +97,7 @@ fn on_configure(config: &mut RoomConfiguration) {
 #[handler(stoc::DuelStart)]
 #[register_to(STOC_HANDLERS as ServerToClientHandler)]
 fn on_duel_start(start_time: &mut StartTime) {
-    start_time.start = Local::now();
+    start_time.start.get_or_insert_with(Local::now);
 }
 
 #[after(srvpro::CreateProvider)]
@@ -155,7 +155,7 @@ pub fn build_report(room: &Room, score: &Score, first_attack: &FirstAttack, star
     Report {
         players,
         replays: Vec::new(),
-        start_time: start_time.start,
+        start_time: start_time.start.unwrap_or_else(Local::now),
         end_time: Local::now(),
         name: room.name.clone(),
     }

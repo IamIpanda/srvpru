@@ -16,6 +16,7 @@ use crate::message as srvpro;
 use crate::plugin::chat_command::CHAT_COMMANDS;
 use crate::plugin::chat_command::ChatCommandHandler;
 use crate::GlobalHandler;
+use crate::room::Anymap;
 use crate::room::Request;
 use crate::room::Room;
 use crate::room::ROOMS;
@@ -94,7 +95,7 @@ fn random_tip(configuration: &Configuration) -> Option<String> {
 
 #[command]
 #[register_to(CHAT_COMMANDS as ChatCommandHandler with &'static str)]
-fn tip(room: &mut Room, index: usize, _args: &str) {
+fn tip(room: &mut Room, _states: &mut Anymap, index: usize, _args: &str) {
     let Some(tip_configuration) = room.configuration.configurations.get::<Configuration>() else { return };
     if let Some(message) = random_tip(tip_configuration) {
         room.players[index].send_message(&message, Color::Babyblue);

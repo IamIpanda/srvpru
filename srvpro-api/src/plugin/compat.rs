@@ -16,13 +16,10 @@ use crate::plugin::death;
 use crate::plugin::shout;
 use crate::plugin::stop;
 use crate::plugin::welcome;
-use crate::register_router;
 
 /// Name for activitating this module in the plugin system.
 #[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
-
-register_router!(COMPAT_ROUTER, build_compat_router);
 
 #[derive(Deserialize)]
 struct CompatQuery {
@@ -36,6 +33,7 @@ struct CompatQuery {
     deathcancel: Option<String>,
 }
 
+#[api]
 fn build_compat_router() -> Router {
     Router::new().route("/api/message", get(message))
 }

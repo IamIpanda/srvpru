@@ -62,7 +62,7 @@ pub struct Configuration {
     pub provider: String,
 }
 
-#[handler(srvpro::ConfigurationChanged)]
+#[after(srvpro::ConfigurationChanged)]
 #[register_to(crate::SRVPRO_GLOBAL_HANDLERS as crate::GlobalHandler)]
 fn on_configuration_changed() {
     let provider = crate::configuration::get_configuration::<Configuration>().map(|configuration| configuration.provider);
@@ -102,7 +102,7 @@ fn on_join_game(room: &mut Room, states: &mut Anymap, index: usize, stop: &mut S
         } else {
             server_to_client_sink.unbounded_send(Complex::from_message(stoc::Chat {
                 player: Color::Red.into(),
-                msg: "[Server]: 没有找到录像".into(),
+                msg: "没有找到录像".into(),
             }.into())).ok();
             server_to_client_sink.unbounded_send(Complex::from_message(stoc::ErrorMessage {
                 err: ErrorMessage::JoinError(JoinError::HostRefused),

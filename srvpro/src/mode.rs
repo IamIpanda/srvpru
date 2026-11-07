@@ -115,7 +115,7 @@ fn build_mode_processor() -> ModeProcessor {
     processor
 }
 
-#[handler(srvpro::ConfigurationChanged)]
+#[after(srvpro::ConfigurationChanged)]
 #[register_to(crate::SRVPRO_GLOBAL_HANDLERS as GlobalHandler)]
 fn on_configuration_changed() {
     MODE_PROCESSOR.store(std::sync::Arc::new(build_mode_processor()));

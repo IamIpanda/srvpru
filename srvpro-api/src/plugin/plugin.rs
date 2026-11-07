@@ -8,14 +8,11 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::auth;
-use crate::register_router;
 use srvpro::configuration;
 
 /// Name for activitating this module in the plugin system.
 #[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
-
-register_router!(PLUGIN_ROUTER, build_plugin_router);
 
 const PERMISSION: &str = "change_settings";
 
@@ -35,6 +32,7 @@ struct PluginResult {
     plugins: Vec<String>,
 }
 
+#[api]
 fn build_plugin_router() -> Router {
     auth::required(PERMISSION, Router::new()
         .route("/api/plugins", get(get_plugins))

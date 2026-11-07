@@ -61,7 +61,7 @@ pub struct Configuration {
     pub provider: String,
 }
 
-#[handler(srvpro::ConfigurationChanged)]
+#[after(srvpro::ConfigurationChanged)]
 #[register_to(crate::SRVPRO_GLOBAL_HANDLERS as crate::GlobalHandler)]
 fn on_configuration_changed() {
     let provider = crate::configuration::get_configuration::<Configuration>().map(|configuration| configuration.provider);
@@ -484,7 +484,7 @@ pub mod file {
             },
         };
         replay.messages.into_iter().find_map(|message| match message {
-            gm::Message::SibylReplay(message) => Some(*message.replay),
+            gm::Message::SibylReplay(message) => Some(message.replay),
             _ => None,
         })
     }
@@ -582,7 +582,7 @@ pub mod api {
             },
         };
         replay.messages.into_iter().find_map(|message| match message {
-            gm::Message::SibylReplay(message) => Some(*message.replay),
+            gm::Message::SibylReplay(message) => Some(message.replay),
             _ => None,
         })
     }

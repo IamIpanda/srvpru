@@ -1,6 +1,6 @@
 [package]
 name = "srvpro"
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 license-file.workspace = true
 repository.workspace = true
@@ -20,7 +20,7 @@ arc-swap = "1"
 # Waiting for https://goals.rust-lang.org/2026/afidt-box.html
 async-trait = "0.1"
 base64 = "0.23"
-binrw = "0.13"
+binrw = "0.15"
 bytes = "1"
 env_logger = "0.11"
 futures = "0.3"
@@ -44,9 +44,15 @@ ygopro-derive = "0"
 ygopro-external-server-bridge = "0"
 ygopro-handler = { version = "0", default-features = false }
 
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+libc = "0.2"
+
 [features]
-default = ["zip", "card", "forge", "field"]
+default = ["zip", "card", "forge", "official"]
 zip = ["ygopro/zip"]
 card = ["ygopro/card"]
 forge = ["ygopro/forge"]
+official = ["ygopro/official"]
+koishi = ["ygopro/koishi"]
+custom = ["ygopro/custom"]
 field = ["ygopro-data/field"]

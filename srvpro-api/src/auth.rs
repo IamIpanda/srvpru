@@ -38,8 +38,6 @@ use srvpro::configuration;
 #[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 
-crate::register_router!(AUTH_ROUTER, build_auth_router);
-
 #[derive(Clone, Configuration)]
 #[config(sync, register_to = "srvpro::plugin::CONFIGURATIONS")]
 pub struct Configuration {
@@ -102,10 +100,12 @@ struct LoginResponse {
 static SNAPSHOT: LazyLock<RwLock<Snapshot>> = LazyLock::new(|| RwLock::new(Snapshot::default()));
 
 pub fn required(permission: &'static str, router: Router) -> Router {
+    if !enabled() { return router }
     router.layer(middleware::from_fn_with_state(permission, require_permission))
 }
 
 pub fn optional(permission: &'static str, router: Router) -> Router {
+    if !enabled() { return router }
     router.layer(middleware::from_fn_with_state(permission, allow_permission))
 }
 
@@ -131,6 +131,7 @@ async fn allow_permission(State(permission): State<&'static str>, ConnectInfo(ad
     next.run(request).await
 }
 
+#[api]
 fn build_auth_router() -> Router {
     Router::new().route("/api/login", post(login))
 }
@@ -159,7 +160,11 @@ fn identify(request: &Request, permission: &str) -> Result<Identity, StatusCode>
 }
 
 pub fn authorized(request: &Request, permission: &str) -> bool {
-    identify(request, permission).is_ok()
+    !enabled() || identify(request, permission).is_ok()
+}
+
+fn enabled() -> bool {
+    configuration::get().enable_plugins.contains(NAME)
 }
 
 fn credentials(request: &Request) -> Option<(String, String)> {

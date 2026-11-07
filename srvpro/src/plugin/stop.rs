@@ -7,8 +7,6 @@ use ygopro_data::constants::JoinError;
 use ygopro_data::message::ctos;
 use ygopro_data::message::stoc;
 use ygopro_derive::Configuration;
-use ygopro_derive::before;
-use ygopro_derive::register_to;
 use ygopro_handler::StopFlag;
 
 use crate::room::CTOS_PREHANDLERS;
@@ -25,7 +23,7 @@ pub struct Configuration {
     pub message: String,
 }
 
-#[before(ctos::JoinGame)]
+#[handler(ctos::JoinGame, priority = 0)]
 #[register_to(CTOS_PREHANDLERS as ClientToServerPrecursorHandler)]
 fn refuse_join(player: &mut Player, stop: &mut StopFlag) -> &'static str {
     let Some(configuration) = crate::configuration::get_configuration::<Configuration>() else { return "continue" };

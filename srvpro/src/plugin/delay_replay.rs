@@ -22,6 +22,6 @@ fn on_replay() -> &'static str {
 #[register_to(STOC_HANDLERS as ServerToClientHandler)]
 fn on_duel_end(room: &mut Room, replays: &mut Replays) {
     for replay in replays.replays.drain(..) {
-        room.broadcast(stoc::Message::Replay(replay));
+        room.broadcast(stoc::Message::Replay(Box::new(replay)));
     }
 }

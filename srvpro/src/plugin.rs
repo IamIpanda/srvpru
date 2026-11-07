@@ -28,6 +28,8 @@ pub mod soumatou;
 pub mod stop;
 pub mod base;
 pub mod haisui;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub mod latency;
 
 /// Plugins enabled when [`crate::message::Init`] does not name any.
 #[distributed_slice]

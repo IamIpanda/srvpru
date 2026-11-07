@@ -277,7 +277,7 @@ mod start_timeout {
             for remaining in (1..timeout).rev() {
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 if remaining % 5 != 0 { continue }
-                let color = if remaining <= 9 { Color::Red } else { Color::Lightblue };
+                let color = if remaining <= 9 { Color::Red } else { Color::System };
                 sender.unbounded_send(Request::Ex(srvpro::ServerMessage { color, message: format!("{}秒后房主若不开始游戏将被请出房间", remaining), target: None }.into(), 0)).ok();
             }
             tokio::time::sleep(Duration::from_secs(1)).await;

@@ -87,7 +87,7 @@ fn set_join_timeout(client_connect: &mut srvpro::ClientConnect) {
     let timeout = Duration::from_secs(configuration.join_timeout);
     let handle = tokio::spawn(async move {
         tokio::time::sleep(timeout).await;
-        server_to_client_sink_towards_network.unbounded_send(Complex::from_message(stoc::Chat { player: Color::Red.into(), msg: "[Server]: 加入房间超时。".into() }.into())).ok();
+        server_to_client_sink_towards_network.unbounded_send(Complex::from_message(stoc::Chat { player: Color::Red.into(), msg: "加入房间超时。".into() }.into())).ok();
         client_to_server_sink_towards_preprocessor.unbounded_send(Complex::from_message(ctos::Message::LeaveGame(ctos::LeaveGame))).ok();
     });
     player.states.insert(JoinTimeoutTask(handle));

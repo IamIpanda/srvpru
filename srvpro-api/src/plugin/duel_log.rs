@@ -32,7 +32,6 @@ use srvpro::room::SrvproMessageHandler;
 
 use crate::auth;
 use crate::database::CONNECTION;
-use crate::register_router;
 
 /// Name for activitating this module in the plugin system.
 pub static NAME: &'static str = module_path!();
@@ -43,8 +42,6 @@ const LIST_LIMIT: i64 = 10;
 const BASE64_PREFIX: &str = "base64://";
 const FILE_PREFIX: &str = "file://";
 
-register_router!(DUEL_LOG_ROUTER, build_duel_log_router);
-
 #[derive(Clone, Configuration)]
 #[config(sync, register_to = "srvpro::plugin::CONFIGURATIONS")]
 pub struct Configuration {
@@ -52,6 +49,7 @@ pub struct Configuration {
     pub always_save_replay_to_database: bool,
 }
 
+#[api]
 fn build_duel_log_router() -> Router {
     auth::required(PERMISSION, Router::new()
         .route("/api/duellog", get(list))

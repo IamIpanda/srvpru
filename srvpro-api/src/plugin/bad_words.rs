@@ -11,14 +11,8 @@ use serde::Serialize;
 
 use crate::auth;
 use crate::config;
-use crate::register_router;
 use srvpro::configuration;
 use srvpro::managers::config_manager;
-
-/// Name for activitating this module in the plugin system.
-pub static NAME: &'static str = srvpro::plugin::bad_words::NAME;
-
-register_router!(BAD_WORDS_ROUTER, build_bad_words_router);
 
 const PERMISSION: &str = "change_settings";
 const FILE_NAME: &str = "bad_words";
@@ -35,6 +29,7 @@ struct BadWordsResult {
     message: String,
 }
 
+#[api(srvpro::plugin::bad_words::NAME)]
 fn build_bad_words_router() -> Router {
     auth::required(PERMISSION, Router::new().route("/api/bad_words", post(change_bad_words)))
 }

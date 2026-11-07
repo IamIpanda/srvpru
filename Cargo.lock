@@ -229,9 +229,9 @@ checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
 name = "binrw"
-version = "0.13.4"
+version = "0.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "768230c3e8ce988f15f99af8d0d2c3afd0a656b88b35480fb1f924699e810e57"
+checksum = "6ad120d555272286c1017d25165ab8bd74806f13fc85b258484ec7e4ce75458f"
 dependencies = [
  "array-init",
  "binrw_derive",
@@ -240,15 +240,15 @@ dependencies = [
 
 [[package]]
 name = "binrw_derive"
-version = "0.13.4"
+version = "0.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08118044b6695ea0de85ecdaac53adeb0d5d024770a904f45b9453ad3c12898c"
+checksum = "6df92e0e9baae4dc82c7bad7715ca40c0a5c71539057bf2ea04a5c29c980410b"
 dependencies = [
  "either",
  "owo-colors",
  "proc-macro2",
  "quote",
- "syn 1.0.109",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -270,6 +270,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
 dependencies = [
  "generic-array",
+]
+
+[[package]]
+name = "bstr"
+version = "1.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6bb31b46c14244e20ee9984b11bf5c992b91fb6939fea616e3512c8baecdbe5f"
+dependencies = [
+ "memchr",
+ "serde_core",
 ]
 
 [[package]]
@@ -1162,6 +1172,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "mlua"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a7ae6b65bf54b7fdd4cf5b6f44f60862350ebf3fe3779b3a9cc005e7fa14f81"
+dependencies = [
+ "bstr",
+ "either",
+ "libc",
+ "mlua-sys",
+ "num-traits",
+ "parking_lot",
+ "rustc-hash",
+]
+
+[[package]]
+name = "mlua-sys"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1631cda17bd6486410ab751d91f5fd4484f441589278cdad879eb3afc721a285"
+dependencies = [
+ "cc",
+ "cfg-if",
+ "libc",
+ "pkg-config",
+]
+
+[[package]]
 name = "modular-bitfield"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1233,9 +1270,9 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "owo-colors"
-version = "3.5.0"
+version = "4.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1b04fb49957986fdce4d6ee7a65027d55d4b6d2265e5848bbb507b58ccfdb6f"
+checksum = "13c45bb4a6ae1280ec0803b1ef9d3455eb50f01efbbe1447ab020f1d54fba9d8"
 
 [[package]]
 name = "parking_lot"
@@ -1500,6 +1537,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustc-hash"
+version = "2.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b1e7f9a428571be2dc5bc0505c13fb6bf936822b894ec87abf8a08a4e51742d"
+
+[[package]]
 name = "rustls"
 version = "0.23.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1732,7 +1775,7 @@ dependencies = [
 
 [[package]]
 name = "srvpro"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aho-corasick",
  "anymap3",
@@ -1746,6 +1789,7 @@ dependencies = [
  "futures",
  "glob",
  "hashbrown 0.17.1",
+ "libc",
  "linkme",
  "log",
  "parking_lot",
@@ -1770,7 +1814,7 @@ dependencies = [
 
 [[package]]
 name = "srvpro-api"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anymap3",
  "arc-swap",
@@ -2479,7 +2523,7 @@ dependencies = [
 
 [[package]]
 name = "ygopro"
-version = "0.1.10"
+version = "0.2.0"
 dependencies = [
  "anymap3",
  "arc-swap",
@@ -2493,6 +2537,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "linkme",
  "log",
+ "mlua",
  "parking_lot",
  "rand 0.8.7",
  "semver",
@@ -2511,10 +2556,12 @@ dependencies = [
 
 [[package]]
 name = "ygopro-core-wrapper"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "cc",
  "glob",
+ "mlua",
+ "mlua-sys",
  "modular-bitfield",
  "parking_lot",
  "rand 0.8.7",
@@ -2523,7 +2570,7 @@ dependencies = [
 
 [[package]]
 name = "ygopro-data"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "binrw",
  "bitflags 2.13.1",
@@ -2542,7 +2589,7 @@ dependencies = [
 
 [[package]]
 name = "ygopro-derive"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -2552,7 +2599,7 @@ dependencies = [
 
 [[package]]
 name = "ygopro-external-server-bridge"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.22.1",
  "binrw",
@@ -2562,14 +2609,13 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-util",
- "ygopro-core-wrapper",
  "ygopro-data",
  "ygopro-handler",
 ]
 
 [[package]]
 name = "ygopro-handler"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anymap3",
  "binrw",

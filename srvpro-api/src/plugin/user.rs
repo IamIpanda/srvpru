@@ -10,13 +10,10 @@ use serde::Serialize;
 
 use crate::auth;
 use crate::database;
-use crate::register_router;
 
 /// Name for activitating this module in the plugin system.
 #[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
-
-register_router!(USER_ROUTER, build_user_router);
 
 const PERMISSION: &str = "manage_users";
 
@@ -50,6 +47,7 @@ struct UserResult {
     username: String,
 }
 
+#[api]
 fn build_user_router() -> Router {
     auth::required(PERMISSION, Router::new().route("/api/users", get(get_users).post(save_user).delete(delete_user)))
 }

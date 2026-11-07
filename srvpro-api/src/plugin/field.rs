@@ -17,25 +17,14 @@ use tokio::time::timeout;
 use ygopro_data::field as duel;
 
 use srvpro::plugin::base::field::Field;
-use srvpro::plugin::register_dependencies;
 use srvpro::room::ROOMS;
 
 use crate::auth;
-use crate::register_router;
-
-/// Name for activitating this module in the plugin system.
-#[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
-pub static NAME: &'static str = module_path!();
-
-register_dependencies!(
-    srvpro::plugin::base::field::NAME
-);
-
-register_router!(FIELD_ROUTER, build_field_router);
 
 const PERMISSION: &str = "get_field";
 const QUERY_TIMEOUT: Duration = Duration::from_secs(1);
 
+#[api(srvpro::plugin::base::field::NAME)]
 fn build_field_router() -> Router {
     auth::required(PERMISSION, Router::new().route("/api/field/{room}", get(get_field)))
 }

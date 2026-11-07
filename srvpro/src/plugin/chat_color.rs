@@ -12,6 +12,7 @@ use ygopro_derive::register_to;
 use crate::plugin::chat_command::ChatCommandHandler;
 use crate::plugin::chat_command::CHAT_COMMANDS;
 use crate::plugin::register_dependencies;
+use crate::room::Anymap;
 use crate::room::Room;
 use crate::room::STOC_HANDLERS;
 use crate::room::ServerToClientHandler;
@@ -30,7 +31,7 @@ struct ChatColor(Color);
 
 #[command]
 #[register_to(CHAT_COMMANDS as ChatCommandHandler with &'static str)]
-fn color(room: &mut Room, index: usize, args: &str) {
+fn color(room: &mut Room, _states: &mut Anymap, index: usize, args: &str) {
     let Some(player) = room.players.get_mut(index) else { return };
     let args = args.trim();
     if args.is_empty() {

@@ -223,7 +223,7 @@ fn on_join_game(room: &mut Room, states: &mut Anymap) {
 
 #[command]
 #[register_to(CHAT_COMMANDS as ChatCommandHandler with &'static str)]
-fn ai(room: &mut Room, index: usize, args: &str) {
+fn ai(room: &mut Room, _states: &mut Anymap, index: usize, args: &str) {
     let room_name = room.name.clone();
     let Some(configuration) = crate::configuration::get_configuration::<Configuration>() else { return };
     let Some(player) = room.players.get_mut(index) else { return };

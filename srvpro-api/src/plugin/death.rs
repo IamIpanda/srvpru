@@ -9,14 +9,8 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::auth;
-use crate::register_router;
 use srvpro::room::Request;
 use srvpro::room::ROOMS;
-
-/// Name for activitating this module in the plugin system.
-pub static NAME: &'static str = srvpro::plugin::death::NAME;
-
-register_router!(DEATH_ROUTER, build_death_router);
 
 const PERMISSION: &str = "start_death";
 
@@ -31,6 +25,7 @@ struct DeathResult {
     payload: String,
 }
 
+#[api(srvpro::plugin::death::NAME)]
 fn build_death_router() -> Router {
     auth::required(PERMISSION, Router::new()
         .route("/api/death", get(start_death))

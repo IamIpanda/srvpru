@@ -9,15 +9,6 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::auth;
-use crate::register_router;
-
-/// Kept separate from `srvpro::plugin::stop`: the panel has to answer while the server is running,
-/// and that plugin is off in exactly that state.
-/// Name for activitating this module in the plugin system.
-#[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
-pub static NAME: &'static str = module_path!();
-
-register_router!(STOP_ROUTER, build_stop_router);
 
 const PERMISSION: &str = "stop";
 const MESSAGE_KEY: &str = "stop_message";
@@ -38,6 +29,7 @@ struct StopState {
     stopped: bool,
 }
 
+#[api(global)]
 fn build_stop_router() -> Router {
     auth::required(PERMISSION, Router::new()
         .route("/api/stop", get(stop))

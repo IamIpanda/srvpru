@@ -7,11 +7,12 @@ use ygopro_data::constants::Color;
 use ygopro_data::message::ctos;
 use ygopro_handler::StopFlag;
 
+use crate::room::Anymap;
 use crate::room::CTOS_HANDLERS;
 use crate::room::ClientToServerHandler;
 use crate::room::Room;
 
-pub type ChatCommand = fn(&mut Room, usize, &str);
+pub type ChatCommand = fn(&mut Room, &mut Anymap, usize, &str);
 
 #[derive(Clone, Copy)]
 pub struct ChatCommandHandler {
@@ -36,7 +37,7 @@ fn command_handler(room: &Room, command_name: &str) -> Option<ChatCommandHandler
 
 #[before(ctos::Chat, module = "srvpro::core")]
 #[register_to(CTOS_HANDLERS as ClientToServerHandler)]
-fn before_chat(room: &mut Room, index: usize, chat: &ctos::Chat, stop: &mut StopFlag) -> &'static str {
+fn before_chat(room: &mut Room, states: &mut Anymap, index: usize, chat: &ctos::Chat, stop: &mut StopFlag) -> &'static str {
     if !chat.msg.starts_with("/") { return "continue" }
     let (command_name, args) = match chat.msg.split_once(' ') {
         Some((name, rest)) => (name, rest.trim()),
@@ -45,7 +46,7 @@ fn before_chat(room: &mut Room, index: usize, chat: &ctos::Chat, stop: &mut Stop
     match command_handler(room, command_name.strip_prefix('/').unwrap_or(command_name)) {
         Some(handler) => {
             stop.0 = true;
-            (handler.handler)(room, index, args);
+            (handler.handler)(room, states, index, args);
             "cancel"
         },
         None => "continue",
@@ -54,7 +55,7 @@ fn before_chat(room: &mut Room, index: usize, chat: &ctos::Chat, stop: &mut Stop
 
 #[command(module = "srvpro::core")]
 #[register_to(CHAT_COMMANDS as ChatCommandHandler with &'static str)]
-fn help(room: &mut Room, index: usize, _args: &str) {
+fn help(room: &mut Room, _states: &mut Anymap, index: usize, _args: &str) {
     if let Some(player) = room.players.get(index) {
         player.send_message("Available commands", Color::Blue);
         let names: Vec<&'static str> = CHAT_COMMANDS.iter().map(|build| build())
@@ -69,6 +70,6 @@ fn help(room: &mut Room, index: usize, _args: &str) {
 
 #[command(module = "srvpro::core")]
 #[register_to(CHAT_COMMANDS as ChatCommandHandler with &'static str)]
-fn roomname(room: &mut Room, index: usize, _args: &str) {
+fn roomname(room: &mut Room, _states: &mut Anymap, index: usize, _args: &str) {
     room.players[index].send_message(&format!("Room name: {}", room.name), Color::Babyblue);
 }

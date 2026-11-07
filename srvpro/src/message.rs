@@ -41,27 +41,34 @@ where
     }
 }
 
-/// The configuration was replaced; handlers should reload their values.
+/// The configuration was replaced; Plugin should reload their stored values.
 ///
 /// Handled by the global handler chain ([`crate::SRVPRO_GLOBAL_HANDLERS`]).
 #[derive(Debug, Message)]
 #[message(srvpro, flag = 2)]
-pub struct ConfigurationChanged;
+pub struct LoadConfiguration;
 
-/// A plugin was enabled at runtime.
+/// The configuration was replaced; Plugin should reload their stored values.
 ///
 /// Handled by the global handler chain ([`crate::SRVPRO_GLOBAL_HANDLERS`]).
 #[derive(Debug, Message)]
 #[message(srvpro, flag = 3)]
-pub struct PluginEnabled {
-    pub module_name: String,
-}
+pub struct ConfigurationChanged;
 
-/// A plugin was disabled at runtime.
+/// A plugin was enabled at runtime. Plugin should run its constructor.
 ///
 /// Handled by the global handler chain ([`crate::SRVPRO_GLOBAL_HANDLERS`]).
 #[derive(Debug, Message)]
 #[message(srvpro, flag = 4)]
+pub struct PluginEnabled {
+    pub module_name: String,
+}
+
+/// A plugin was disabled at runtime. Plugin should run its destructor.
+///
+/// Handled by the global handler chain ([`crate::SRVPRO_GLOBAL_HANDLERS`]).
+#[derive(Debug, Message)]
+#[message(srvpro, flag = 5)]
 pub struct PluginDisabled {
     pub module_name: String,
 }
@@ -251,10 +258,11 @@ pub struct Terminate;
 
 macro_rules! generate_enum {
     ($($message_name:ident = $message_flag:literal),*) => {
+        #[repr(u8)]
         #[doc = "Every srvpro event, keyed by the numbers declared in `generate_enum!`."]
         #[derive(Debug)]
         pub enum Message {
-            $($message_name($message_name)),*
+            $($message_name($message_name) = $message_flag),*
         }
 
         impl ygopro_data::message::PureMessage for Message {}
@@ -310,9 +318,10 @@ macro_rules! generate_enum {
 
 generate_enum!(
     Init = 1,
-    ConfigurationChanged = 2,
-    PluginEnabled = 3,
-    PluginDisabled = 4,
+    LoadConfiguration = 2,
+    ConfigurationChanged = 3,
+    PluginEnabled = 4,
+    PluginDisabled = 5,
     ClientConnect = 11,
     ClientRefused = 14,
     PlayerJoin = 101,

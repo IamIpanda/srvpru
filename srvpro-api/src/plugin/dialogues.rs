@@ -11,14 +11,8 @@ use serde::Serialize;
 
 use crate::auth;
 use crate::config;
-use crate::register_router;
 use srvpro::configuration;
 use srvpro::managers::config_manager;
-
-/// Name for activitating this module in the plugin system.
-pub static NAME: &'static str = srvpro::plugin::dialogues::NAME;
-
-register_router!(DIALOGUES_ROUTER, build_dialogues_router);
 
 const PERMISSION: &str = "change_settings";
 const FILE_NAME: &str = "dialogues";
@@ -36,6 +30,7 @@ struct DialoguesResult {
     payload: serde_json::Value,
 }
 
+#[api(srvpro::plugin::dialogues::NAME)]
 fn build_dialogues_router() -> Router {
     auth::required(PERMISSION, Router::new().route("/api/dialogues", post(change_dialogues)))
 }

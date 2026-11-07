@@ -90,7 +90,7 @@ fn build_ctos_preprocessor(enabled_plugins: &hashbrown::HashSet<String>) -> Clie
     Processor::new_with_groups(&CTOS_PREHANDLERS, enabled_plugins, |h| { h.module_name }, |k| { *k == 0 })
 }
 
-#[handler(srvpro::ConfigurationChanged)]
+#[after(srvpro::ConfigurationChanged)]
 #[register_to(crate::SRVPRO_GLOBAL_HANDLERS as GlobalHandler)]
 fn on_configuration_changed() {
     let configuration = crate::configuration::get();
@@ -192,9 +192,10 @@ impl Player {
     }
       
     pub fn send_message(&self, message: &str, color: Color) {
+        let prefix = if color as u8 >= 10 { "[Server]: " } else { "" };
         self.server_to_client_sink_towards_network.unbounded_send(Complex::from_message(stoc::Chat {
             player: color.into(),
-            msg: format!("[Server]: {message}").into(),
+            msg: format!("{prefix}{message}").into(),
         }.into())).ok();
     }
 }
@@ -418,9 +419,10 @@ impl Room {
     }
 
     pub fn broadcast_message(&self, color: Color, message: &str) {
+        let prefix: &str = if color as u8 >= 10 { "[Server]: " } else { "" };
         self.broadcast(stoc::Chat {
             player: color.into(),
-            msg: format!("[Server]: {message}").into(),
+            msg: format!("{prefix}{message}").into(),
         }.into());
     }
 
@@ -430,12 +432,25 @@ impl Room {
         provider.ctos_sender.send(ygopro::duel::Request::Query(Box::new(move |duel, states| { sender.send(query(duel, states)).ok(); }))).ok()?;
         receiver.await.ok()
     }
+
+    pub fn get_provider_sender(&self) -> Option<tokio::sync::mpsc::UnboundedSender<ygopro::duel::Request>> {
+        let Some(Provider::Embedded(provider)) = self.provider.as_ref() else { return None };
+        Some(provider.ctos_sender.clone())
+    }
+
+    pub async fn query_provider_sender<T: Send + 'static>(provider: &tokio::sync::mpsc::UnboundedSender<ygopro::duel::Request>, query: impl FnOnce(&mut ygopro::duel::Duel, &mut Anymap) -> T + Send + 'static) -> Option<T> {
+        let (response_sender, response_receiver) = oneshot::channel();
+        provider.send(ygopro::duel::Request::Query(Box::new(move |duel, states| { response_sender.send(query(duel, states)).ok(); }))).ok()?;
+        response_receiver.await.ok()
+    }
+    
 }
 
 #[handler(srvpro::ServerMessage, module = "srvpro::core")]
 #[register_to(SRVPRO_HANDLERS as SrvproMessageHandler)]
 fn on_server_message(room: &mut Room, server_message: &srvpro::ServerMessage) {
-    let chat = stoc::Chat { player: server_message.color.into(), msg: format!("[Server]: {}", server_message.message).into() };
+    let prefix = if server_message.color as u8 >= 10 { "[Server]: " } else { "" };
+    let chat = stoc::Chat { player: server_message.color.into(), msg: format!("{prefix}{}", server_message.message).into() };
     match server_message.target {
         Some(index) => room.send(Request::STOC(Complex::from_message(chat.into()), index)),
         None => room.broadcast(chat.into()),

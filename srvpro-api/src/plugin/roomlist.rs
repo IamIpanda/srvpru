@@ -50,8 +50,6 @@ register_dependencies!(
     srvpro::plugin::base::score::NAME
 );
 
-crate::register_router!(ROOMLIST_ROUTER, build_roomlist_router);
-
 const PERMISSION: &str = "get_rooms";
 
 #[derive(Clone, Configuration)]
@@ -244,6 +242,7 @@ fn filtered(rooms: Vec<RoomSnapshot>, filter: Filter) -> Vec<RoomSnapshot> {
     rooms.into_iter().filter(|room| filter.holds(room.started)).collect()
 }
 
+#[api]
 fn build_roomlist_router() -> Router {
     auth::optional(PERMISSION, Router::new()
         .route("/api/getrooms", get(get_rooms))

@@ -43,7 +43,7 @@ fn command_handler(command_name: &str) -> Option<PassCommandHandler> {
         .map(|(_, handler)| handler)
 }
 
-#[before(ctos::JoinGame, priority = 2, module = "srvpro::core")]
+#[handler(ctos::JoinGame, priority = 5, module = "srvpro::core")]
 #[register_to(CTOS_PREHANDLERS as ClientToServerPrecursorHandler)]
 async fn before_join_game(bundle: &mut Bundle<Complex<ctos::Message>, Player, extract::Response<ctos::Message>>) -> &'static str {
     let pass: &str = match &*bundle.request {
