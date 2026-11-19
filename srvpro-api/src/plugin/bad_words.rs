@@ -11,6 +11,8 @@ use serde::Serialize;
 
 use crate::auth;
 use crate::config;
+use crate::portal::ConfigTab;
+use crate::portal::ConfigTabContent;
 use srvpro::configuration;
 use srvpro::managers::config_manager;
 
@@ -18,6 +20,15 @@ const PERMISSION: &str = "change_settings";
 const FILE_NAME: &str = "bad_words";
 const FIELD: &str = "groups";
 const KEY: &str = "bad_words_groups";
+
+#[distributed_slice(crate::portal::PORTAL_CONFIG_TABS)]
+static CONFIG: ConfigTab = ConfigTab {
+    plugin: srvpro::plugin::bad_words::NAME,
+    title: "屏蔽词",
+    order: 23,
+    toggle: true,
+    content: ConfigTabContent::Component { export: "BadWords" },
+};
 
 #[derive(Deserialize)]
 struct BadWordsRequest {

@@ -11,6 +11,10 @@ use serde::Serialize;
 
 use crate::auth;
 use crate::config;
+use crate::portal::ConfigField;
+use crate::portal::ConfigFieldKind;
+use crate::portal::ConfigTab;
+use crate::portal::ConfigTabContent;
 use srvpro::configuration;
 use srvpro::managers::config_manager;
 
@@ -18,6 +22,17 @@ const PERMISSION: &str = "change_settings";
 const FILE_NAME: &str = "dialogues";
 const FIELD: &str = "dialogues";
 const KEY: &str = "dialogues_dialogues";
+
+#[distributed_slice(crate::portal::PORTAL_CONFIG_TABS)]
+pub static CONFIG: ConfigTab = ConfigTab {
+    plugin: srvpro::plugin::dialogues::NAME,
+    title: "登场台词",
+    order: 22,
+    toggle: true,
+    content: ConfigTabContent::Fields(&[
+        ConfigField { key: "dialogues_dialogues", label: "台词", kind: ConfigFieldKind::Json, default: "{}", options: &[] },
+    ]),
+};
 
 #[derive(Deserialize)]
 struct DialoguesRequest {

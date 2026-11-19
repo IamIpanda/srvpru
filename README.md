@@ -62,8 +62,8 @@ npm ci
 npm run build # → srvpro-portal/dist
 ```
 
-`srvpro-app` enables `api`, `zip`, `card` and `forge` by default. Building it with
-`--no-default-features --features zip,card,forge` produces a headless server without the HTTP API and the
+`srvpro-app` enables `api`, `zip`, `card`, `forge` and `official` by default. Building it with
+`--no-default-features --features zip,card,forge,official` produces a headless server without the HTTP API and the
 portal.
 
 ## Running

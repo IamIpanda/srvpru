@@ -19,6 +19,8 @@ tower = { version = "0.5", features = ["util"] }
 linkme = "0.3"
 futures = "0.3"
 hashbrown = "0.17"
+http-body-util = { version = "0.1", optional = true }
+include_bytes_aligned = { version = "0.2", optional = true }
 log = "0.4"
 parking_lot = "0.12"
 rand = "0.8"
@@ -31,8 +33,12 @@ serde_yaml = "0.8"
 slotmap = "1.1"
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.6", features = ["fs"] }
+web-static-pack = { version = "0.5", optional = true }
 
-srvpro = { workspace = true, default-features = true }
-ygopro-data = { version = "0", default-features = false, features = ["field"] }
+srvpro = { workspace = true, features = ["zip", "card", "forge", "official"] }
+ygopro-data = { version = "0", features = ["hashbrown"] }
 ygopro-derive = "0"
 ygopro-handler = { version = "0", default-features = false }
+
+[features]
+embedded-portal = ["dep:http-body-util", "dep:include_bytes_aligned", "dep:web-static-pack"]

@@ -10,6 +10,8 @@ use serde::Serialize;
 
 use crate::auth;
 use crate::database;
+use crate::portal::ConfigTab;
+use crate::portal::ConfigTabContent;
 
 /// Name for activitating this module in the plugin system.
 #[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
@@ -46,6 +48,15 @@ struct UserResult {
     message: String,
     username: String,
 }
+
+#[distributed_slice(crate::portal::PORTAL_CONFIG_TABS)]
+pub static CONFIG: ConfigTab = ConfigTab {
+    plugin: module_path!(),
+    title: "用户",
+    order: 10,
+    toggle: false,
+    content: ConfigTabContent::Component { export: "Users" },
+};
 
 #[api]
 fn build_user_router() -> Router {

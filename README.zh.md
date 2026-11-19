@@ -53,8 +53,8 @@ npm ci
 npm run build # → srvpro-portal/dist
 ```
 
-`srvpro-app` 默认开启 `api`、`zip`、`card`、`forge` 四个 feature。用
-`--no-default-features --features zip,card,forge` 编译可以得到一个不带 HTTP API 与后台的纯服务端。
+`srvpro-app` 默认开启 `api`、`zip`、`card`、`forge`、`official` 五个 feature。用
+`--no-default-features --features zip,card,forge,official` 编译可以得到一个不带 HTTP API 与后台的纯服务端。
 
 ## 运行
 

@@ -1,0 +1,15 @@
+{
+  "name": "srvpro-pages",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && node build.mjs"
+  },
+  "devDependencies": {
+    "@srvpro/portal-sdk": "*",
+    "preact": "^10.29.7",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.0"
+  }
+}

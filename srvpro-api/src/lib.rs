@@ -9,15 +9,16 @@ use axum::Router;
 use axum::extract::Request;
 use axum::response::Response;
 use tower::ServiceExt;
-use tower_http::services::ServeDir;
-use tower_http::services::ServeFile;
 use ygopro_derive::Configuration;
+
+use crate::portal::*;
 
 pub mod auth;
 pub mod bootstrap;
 pub mod config;
 pub mod database;
 pub mod plugin;
+pub mod portal;
 
 #[macro_use]
 extern crate ygopro_derive;
@@ -45,13 +46,24 @@ pub struct Configuration {
     /// SQLite database file holding accounts and configuration.
     #[config(default = "\"srvpro.db\".to_string()")]
     pub database: String,
-    /// Directory holding the built portal; empty disables static file serving.
-    #[config(default = "\"portal\".to_string()")]
-    pub static_dir: String,
     /// Server name shown by the API.
     #[config(default = "\"Srvpru Server\".to_string()")]
     pub name: String,
 }
+
+#[distributed_slice(PORTAL_CONFIG_TABS)]
+static GENERAL_TAB: ConfigTab = ConfigTab {
+    plugin: "srvpro::core",
+    title: "通用",
+    order: 0,
+    toggle: false,
+    content: ConfigTabContent::Fields(&[
+        ConfigField { key: "api_name", label: "服务器名称", kind: ConfigFieldKind::Text, default: "Srvpru Server", options: &[] },
+        ConfigField { key: "auth_token_ttl_days", label: "登录有效期（天）", kind: ConfigFieldKind::Text, default: "180", options: &[] },
+        ConfigField { key: "api_port", label: "HTTP 端口", kind: ConfigFieldKind::Text, default: "7922", options: &[] },
+        ConfigField { key: "server_port", label: "ygopro 端口", kind: ConfigFieldKind::Text, default: "7911", options: &[] },
+    ]
+)};
 
 static ROUTER: LazyLock<ArcSwap<Router>> = LazyLock::new(|| ArcSwap::from_pointee(build_router_from_configuration()));
 
@@ -77,15 +89,12 @@ async fn serve() {
 
 fn build_router_from_configuration() -> Router {
     let configuration = srvpro::configuration::get();
-    let static_dir = srvpro::configuration::get_configuration::<Configuration>().map(|configuration| configuration.static_dir).unwrap_or_default();
-    build_router(&configuration.enable_plugins, &static_dir)
+    build_router(&configuration.enable_plugins)
 }
 
-fn build_router(enabled_plugins: &hashbrown::HashSet<String>, static_dir: &str) -> Router {
+fn build_router(enabled_plugins: &hashbrown::HashSet<String>) -> Router {
     let enabled = SRVPRO_API_ROUTERS.iter().filter(|(plugin, _)| enabled_plugins.contains(*plugin)).map(|(_, build)| build);
-    let router = SRVPRO_API_GLOBAL_ROUTERS.iter().chain(enabled).fold(Router::new(), |router, build| router.merge(build()));
-    if static_dir.is_empty() { return router }
-    router.fallback_service(ServeDir::new(static_dir).not_found_service(ServeFile::new(format!("{static_dir}/index.html"))))
+    SRVPRO_API_GLOBAL_ROUTERS.iter().chain(enabled).fold(Router::new(), |router, build| router.merge(build()))
 }
 
 async fn dispatch(request: Request) -> Response {

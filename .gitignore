@@ -3,6 +3,9 @@ target/
 **/*.rs.bk
 node_modules/
 srvpro-portal/dist/
+srvpro-api/dist/
+portal/
+srvpro-portal-backup/
 *.log
 *.db
 *.db-journal

@@ -8,8 +8,41 @@ permissions:
   contents: write
 
 jobs:
+  portal:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Build portal
+        run: |
+          npm ci
+          npm run build
+          mkdir -p portal
+          cp -r srvpro-portal/dist/. portal/
+          cp -r srvpro-api/dist/. portal/
+
+      - name: Pack portal
+        run: |
+          cargo install web-static-pack-packer --version 0.5.3 --locked
+          web-static-pack-packer directory-single portal srvpro-portal.pack
+
+      - name: Upload portal
+        uses: actions/upload-artifact@v4
+        with:
+          name: srvpro-portal
+          path: srvpro-portal.pack
+          if-no-files-found: error
+
   build:
     name: ${{ matrix.name }}
+    needs: portal
     strategy:
       fail-fast: false
       matrix:
@@ -59,13 +92,20 @@ jobs:
           VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "srvpro-app") | .version')
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
+      - name: Download portal
+        if: matrix.flavor == 'api'
+        uses: actions/download-artifact@v4
+        with:
+          name: srvpro-portal
+          path: .
+
       - name: Build release binary
         shell: bash
         run: |
           if [ "${{ matrix.flavor }}" = "headless" ]; then
-            cargo build --release -p srvpro-app --no-default-features --features zip,card,forge,field
+            cargo build --release -p srvpro-app --no-default-features --features zip,card,forge,official
           else
-            cargo build --release -p srvpro-app
+            cargo build --release -p srvpro-app --features embedded-portal
           fi
 
       - name: Compress binaries with UPX

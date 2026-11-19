@@ -10,6 +10,7 @@ use serde::Serialize;
 use ygopro_data::constants::Color;
 
 use crate::auth;
+use crate::portal::Icon;
 use srvpro::message as srvpro_message;
 use srvpro::room::Request;
 use srvpro::room::ROOMS;
@@ -17,6 +18,9 @@ use srvpro::room::ROOMS;
 /// Name for activitating this module in the plugin system.
 #[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
+
+#[distributed_slice(crate::portal::PORTAL_ICONS)]
+static ICON: Icon = Icon { plugin: module_path!(), order: 1, export: "Shout" };
 
 const PERMISSION: &str = "shout";
 

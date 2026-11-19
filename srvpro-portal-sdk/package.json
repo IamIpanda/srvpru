@@ -1,0 +1,16 @@
+{
+  "name": "@srvpro/portal-sdk",
+  "version": "0.0.0",
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./shared": "./src/shared.ts",
+    "./vite": "./src/vite-preset.ts",
+    "./tsconfig.json": "./tsconfig.json"
+  },
+  "peerDependencies": {
+    "preact": "^10.29.7",
+    "vite": "^8.2.0"
+  }
+}

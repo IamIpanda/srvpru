@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "workspaces": ["srvpro-portal-sdk", "srvpro-portal", "srvpro-api"],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present"
+  }
+}

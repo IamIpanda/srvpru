@@ -11,6 +11,10 @@ use serde::Serialize;
 
 use crate::auth;
 use crate::config;
+use crate::portal::ConfigField;
+use crate::portal::ConfigFieldKind;
+use crate::portal::ConfigTab;
+use crate::portal::ConfigTabContent;
 use srvpro::configuration;
 use srvpro::managers::config_manager;
 
@@ -18,6 +22,17 @@ const PERMISSION: &str = "change_settings";
 const FILE_NAME: &str = "welcome";
 const FIELD: &str = "message";
 const KEY: &str = "welcome_message";
+
+#[distributed_slice(crate::portal::PORTAL_CONFIG_TABS)]
+pub static CONFIG: ConfigTab = ConfigTab {
+    plugin: srvpro::plugin::welcome::NAME,
+    title: "欢迎语",
+    order: 20,
+    toggle: true,
+    content: ConfigTabContent::Fields(&[
+        ConfigField { key: "welcome_message", label: "内容", kind: ConfigFieldKind::Multiline, default: "欢迎来到srvpru服务器。\n如遇Bug请联系作者，感谢。", options: &[] },
+    ]),
+};
 
 #[derive(Deserialize)]
 struct WelcomeRequest {

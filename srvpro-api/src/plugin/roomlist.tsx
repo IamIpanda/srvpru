@@ -1,6 +1,6 @@
-import { token } from './auth'
-
-export type RoomConnection = 'connecting' | 'live' | 'offline'
+// SRVPRO_PLUGIN_NAME srvpro_api::plugin::roomlist
+import { ReloadOutlined } from '@ant-design/icons'
+import { Button, Tooltip } from 'antd'
 
 export type PlayerStatus = {
   score: number
@@ -23,6 +23,7 @@ export type Room = {
   needpass: string
   users: RoomPlayer[]
   istart: string
+  start_time?: number | null
 }
 
 export type RoomEvent =
@@ -31,12 +32,13 @@ export type RoomEvent =
   | { event: 'update'; data: Room }
   | { event: 'delete'; data: { name: string; started: boolean } }
 
-export type RoomHandlers = {
-  on_event: (event: RoomEvent) => void
-  on_connection?: (connection: RoomConnection) => void
-}
-
 const RETRY_DELAY = 2000
+const refresh_handlers = new Set<() => void>()
+
+export function on_refresh(handler: () => void): () => void {
+  refresh_handlers.add(handler)
+  return () => { refresh_handlers.delete(handler) }
+}
 
 export function apply_room_event(rooms: Room[], event: RoomEvent): Room[] {
   if (event.event === 'init') return event.data
@@ -46,25 +48,18 @@ export function apply_room_event(rooms: Room[], event: RoomEvent): Room[] {
   return rooms.map((current) => (current.roomname === room.roomname ? room : current))
 }
 
-export function watch_rooms(handlers: RoomHandlers): () => void {
+export function watch_rooms(on_event: (event: RoomEvent) => void): () => void {
   let socket: WebSocket | undefined
   let retry: number | undefined
   let stopped = false
 
   const open = () => {
-    handlers.on_connection?.('connecting')
-    const query = new URLSearchParams()
-    const credential = token()
-    if (credential) query.set('pass', credential)
+    const credential = localStorage.getItem('srvpro_token')
+    const query = credential === null ? '' : `?pass=${encodeURIComponent(credential)}`
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-    socket = new WebSocket(`${protocol}//${location.host}/roomlist/ws?${query}`)
-    socket.onopen = () => handlers.on_connection?.('live')
-    socket.onmessage = (message) => handlers.on_event(JSON.parse(message.data as string) as RoomEvent)
-    socket.onclose = () => {
-      if (stopped) return
-      handlers.on_connection?.('offline')
-      retry = window.setTimeout(open, RETRY_DELAY)
-    }
+    socket = new WebSocket(`${protocol}//${location.host}/roomlist/ws${query}`)
+    socket.onmessage = (message) => on_event(JSON.parse(message.data as string) as RoomEvent)
+    socket.onclose = () => { if (!stopped) retry = window.setTimeout(open, RETRY_DELAY) }
   }
 
   open()
@@ -75,3 +70,8 @@ export function watch_rooms(handlers: RoomHandlers): () => void {
     socket?.close()
   }
 }
+
+export function Refresh() {
+  return <Tooltip title="刷新"><Button type="text" icon={<ReloadOutlined />} onClick={() => { for (const handler of refresh_handlers) handler() }} /></Tooltip>
+}
+

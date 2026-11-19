@@ -39,7 +39,7 @@ ureq = "3.4.0"
 
 ygopro = { version = "0", default-features = false }
 ygopro-core-wrapper = { version = "0", default-features = false }
-ygopro-data = { version = "0", default-features = false }
+ygopro-data = { version = "0", features = ["hashbrown"] }
 ygopro-derive = "0"
 ygopro-external-server-bridge = "0"
 ygopro-handler = { version = "0", default-features = false }
@@ -55,4 +55,3 @@ forge = ["ygopro/forge"]
 official = ["ygopro/official"]
 koishi = ["ygopro/koishi"]
 custom = ["ygopro/custom"]
-field = ["ygopro-data/field"]

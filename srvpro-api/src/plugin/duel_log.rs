@@ -32,9 +32,14 @@ use srvpro::room::SrvproMessageHandler;
 
 use crate::auth;
 use crate::database::CONNECTION;
+use crate::portal::Page;
 
 /// Name for activitating this module in the plugin system.
+#[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
+
+#[distributed_slice(crate::portal::PORTAL_PAGES)]
+static _PAGE: Page = Page { plugin: module_path!(), route: "", export: "DuelLog", topbar: false };
 
 const PERMISSION: &str = "duel_log";
 const DEFAULT_LIMIT: i64 = 50;
@@ -53,8 +58,9 @@ pub struct Configuration {
 fn build_duel_log_router() -> Router {
     auth::required(PERMISSION, Router::new()
         .route("/api/duellog", get(list))
+        .route("/api/duellog/count", get(count))
         .route("/api/duellog/list/{player}", get(list_player_replays))
-        .route("/api/replay/{id}", get(get_replay)))
+        .route("/api/replay/{id}/{index}", get(get_replay)))
 }
 
 #[derive(Serialize)]
@@ -103,6 +109,7 @@ struct ListQuery {
     #[serde(alias = "playername")]
     player_name: String,
     score: String,
+    keyword: String,
     limit: String,
     offset: String,
 }
@@ -126,6 +133,23 @@ async fn list(Query(query): Query<ListQuery>) -> Response {
     }
 }
 
+#[derive(Serialize)]
+struct CountResult {
+    total: i64,
+}
+
+async fn count(Query(query): Query<ListQuery>) -> Response {
+    let guard = CONNECTION.lock();
+    let Some(connection) = guard.as_ref() else { return StatusCode::INTERNAL_SERVER_ERROR.into_response() };
+    match count_logs(connection, &query) {
+        Ok(total) => Json(CountResult { total }).into_response(),
+        Err(error) => {
+            log::warn!("cannot count duel logs: {error}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 async fn list_player_replays(Path(player): Path<String>) -> Response {
     let guard = CONNECTION.lock();
     let Some(connection) = guard.as_ref() else { return StatusCode::INTERNAL_SERVER_ERROR.into_response() };
@@ -138,21 +162,19 @@ async fn list_player_replays(Path(player): Path<String>) -> Response {
     }
 }
 
-async fn get_replay(Path(id): Path<String>) -> Response {
-    let guard: parking_lot::lock_api::MutexGuard<'_, parking_lot::RawMutex, Option<Connection>> = CONNECTION.lock();
-    let Some(connection) = guard.as_ref() else { return StatusCode::INTERNAL_SERVER_ERROR.into_response() };
-    match search_replays(connection, &id) {
-        Some(entries) => {
-            let mut body = Vec::new();
-            for entry in &entries {
-                match resolve_replay(entry.as_str()).await {
-                    Some(bytes) => body.extend(bytes),
-                    None => log::warn!("cannot resolve replay entry {entry}"),
-                }
-            }
-            ([(CONTENT_TYPE, "application/octet-stream")], body).into_response()
+async fn get_replay(Path((id, index)): Path<(String, usize)>) -> Response {
+    let entry = {
+        let guard: parking_lot::lock_api::MutexGuard<'_, parking_lot::RawMutex, Option<Connection>> = CONNECTION.lock();
+        let Some(connection) = guard.as_ref() else { return StatusCode::INTERNAL_SERVER_ERROR.into_response() };
+        let Some(entry) = search_replays(connection, &id).and_then(|entries| entries.get(index).cloned()) else { return StatusCode::NOT_FOUND.into_response() };
+        entry
+    };
+    match resolve_replay(entry.as_str()).await {
+        Some(bytes) => ([(CONTENT_TYPE, "application/octet-stream")], bytes).into_response(),
+        None => {
+            log::warn!("cannot resolve replay entry {entry}");
+            StatusCode::NOT_FOUND.into_response()
         }
-        None => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
@@ -211,25 +233,7 @@ fn encode_replays(report: &Report, configuration: &Configuration) -> String {
 fn read(connection: &Connection, query: &ListQuery) -> rusqlite::Result<Vec<DuelLog>> {
     let mut sql = String::from("SELECT id, name, duel_count, players, start_time, end_time, team_a_score, team_b_score, replays FROM duel_log WHERE 1");
     let mut parameters: Vec<Value> = Vec::new();
-    let name = query.name.trim();
-    if !name.is_empty() {
-        sql.push_str(" AND name = ?");
-        parameters.push(name.to_owned().into());
-    }
-    if let Ok(duel_count) = query.duel_count.trim().parse::<i64>() {
-        sql.push_str(" AND duel_count = ?");
-        parameters.push(duel_count.into());
-    }
-    let player_name = query.player_name.trim();
-    if !player_name.is_empty() {
-        sql.push_str(" AND ',' || players || ',' LIKE ?");
-        parameters.push(format!("%,{player_name}=%").into());
-    }
-    if let Ok(score) = query.score.trim().parse::<i64>() {
-        sql.push_str(" AND (team_a_score = ? OR team_b_score = ?)");
-        parameters.push(score.into());
-        parameters.push(score.into());
-    }
+    filter(&mut sql, &mut parameters, query);
     let limit = query.limit.trim().parse::<i64>().ok().unwrap_or(DEFAULT_LIMIT);
     let offset = query.offset.trim().parse::<i64>().ok().unwrap_or(0);
     sql.push_str(" ORDER BY rowid DESC LIMIT ? OFFSET ?");
@@ -254,6 +258,41 @@ fn read(connection: &Connection, query: &ListQuery) -> rusqlite::Result<Vec<Duel
         });
     }
     Ok(logs)
+}
+
+fn count_logs(connection: &Connection, query: &ListQuery) -> rusqlite::Result<i64> {
+    let mut sql = String::from("SELECT COUNT(*) FROM duel_log WHERE 1");
+    let mut parameters: Vec<Value> = Vec::new();
+    filter(&mut sql, &mut parameters, query);
+    connection.query_row(&sql, rusqlite::params_from_iter(parameters), |row| row.get(0))
+}
+
+fn filter(sql: &mut String, parameters: &mut Vec<Value>, query: &ListQuery) {
+    let name = query.name.trim();
+    if !name.is_empty() {
+        sql.push_str(" AND name = ?");
+        parameters.push(name.to_owned().into());
+    }
+    if let Ok(duel_count) = query.duel_count.trim().parse::<i64>() {
+        sql.push_str(" AND duel_count = ?");
+        parameters.push(duel_count.into());
+    }
+    let player_name = query.player_name.trim();
+    if !player_name.is_empty() {
+        sql.push_str(" AND ',' || players || ',' LIKE ?");
+        parameters.push(format!("%,{player_name}=%").into());
+    }
+    if let Ok(score) = query.score.trim().parse::<i64>() {
+        sql.push_str(" AND (team_a_score = ? OR team_b_score = ?)");
+        parameters.push(score.into());
+        parameters.push(score.into());
+    }
+    let keyword = query.keyword.trim();
+    if !keyword.is_empty() {
+        sql.push_str(" AND (name LIKE ? OR players LIKE ?)");
+        parameters.push(format!("%{keyword}%").into());
+        parameters.push(format!("%{keyword}%").into());
+    }
 }
 
 

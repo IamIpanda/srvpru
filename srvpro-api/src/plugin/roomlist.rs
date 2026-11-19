@@ -15,6 +15,8 @@ use axum::extract::ws::WebSocket;
 use axum::http::StatusCode;
 use axum::response::Response;
 use axum::routing::get;
+use chrono::DateTime;
+use chrono::Local;
 use futures::future::join_all;
 use serde::Deserialize;
 use serde::Serialize;
@@ -29,12 +31,15 @@ use ygopro_derive::register_to;
 
 use crate::auth;
 use crate::auth::Identity;
+use crate::portal::Icon;
+use crate::portal::Page;
 use srvpro::configuration;
 use srvpro::message as srvpro_message;
 use srvpro::mode::Tag;
 use srvpro::plugin::base::lp::Lp;
 use srvpro::plugin::base::score::Score;
 use srvpro::plugin::base::stage::Stage;
+use srvpro::plugin::base::start_time::StartTime;
 use srvpro::plugin::register_dependencies;
 use srvpro::room::*;
 
@@ -42,12 +47,19 @@ use srvpro::room::*;
 #[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 
+#[distributed_slice(crate::portal::PORTAL_PAGES)]
+static PAGE: Page = Page { plugin: module_path!(), route: "", export: "Room", topbar: false };
+
+#[distributed_slice(crate::portal::PORTAL_ICONS)]
+static REFRESH_ICON: Icon = Icon { plugin: module_path!(), order: 0, export: "Refresh" };
+
 register_dependencies!(
     srvpro::plugin::base::name::NAME,
     srvpro::plugin::base::position::NAME,
     srvpro::plugin::base::stage::NAME,
     srvpro::plugin::base::lp::NAME,
-    srvpro::plugin::base::score::NAME
+    srvpro::plugin::base::score::NAME,
+    srvpro::plugin::base::start_time::NAME
 );
 
 const PERMISSION: &str = "get_rooms";
@@ -89,6 +101,7 @@ struct RoomSnapshot {
     stage: Option<u8>,
     users: Vec<UserSnapshot>,
     started: bool,
+    start_time: Option<DateTime<Local>>,
 }
 
 #[derive(Clone)]
@@ -120,6 +133,7 @@ struct RoomSummary {
     needpass: String,
     users: Vec<UserSummary>,
     istart: String,
+    start_time: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -165,6 +179,7 @@ impl RoomSnapshot {
             needpass: self.name.contains('$').to_string(),
             users: self.users.iter().map(|user| user.summarize(view)).collect(),
             istart: if self.started { "start" } else { "wait" }.to_string(),
+            start_time: self.start_time.map(|time| time.timestamp()),
         }
     }
 }
@@ -355,6 +370,7 @@ fn room_snapshot(room: &Room, states: &Anymap) -> RoomSnapshot {
         stage: states.get::<Stage>().map(|stage| u8::from(stage.stage)),
         users: room.players.iter().filter_map(|(_, player)| snapshot_user(player, in_duel, status)).collect(),
         started: in_duel,
+        start_time: states.get::<StartTime>().and_then(|start_time| start_time.start),
     }
 }
 

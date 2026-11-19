@@ -1,7 +1,6 @@
 //! Duel field of one room, as tracked by `base::field`.
 
 use std::collections::BTreeMap;
-use std::collections::HashSet;
 use std::time::Duration;
 
 use axum::Json;
@@ -14,6 +13,7 @@ use axum::routing::get;
 use serde::Serialize;
 use slotmap::Key;
 use tokio::time::timeout;
+use ygopro_data::HashSet;
 use ygopro_data::field as duel;
 
 use srvpro::plugin::base::field::Field;

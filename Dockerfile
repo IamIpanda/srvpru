@@ -4,15 +4,27 @@ ARG PROXY
 ARG WITH_API=true
 
 WORKDIR /portal
-COPY srvpro-portal/package.json srvpro-portal/package-lock.json ./
+COPY package.json package-lock.json ./
+COPY srvpro-portal-sdk/package.json ./srvpro-portal-sdk/
+COPY srvpro-portal/package.json ./srvpro-portal/
+COPY srvpro-api/package.json ./srvpro-api/
 RUN if [ "$WITH_API" = "true" ]; then \
       if [ -n "$PROXY" ]; then npm config set proxy "$PROXY" && npm config set https-proxy "$PROXY"; fi \
       && npm ci; \
     fi
-COPY srvpro-portal/index.html srvpro-portal/vite.config.ts srvpro-portal/tsconfig.json srvpro-portal/tsconfig.app.json srvpro-portal/tsconfig.node.json ./
-COPY srvpro-portal/public ./public
-COPY srvpro-portal/src ./src
-RUN if [ "$WITH_API" = "true" ]; then npm run build; else mkdir -p dist; fi
+COPY srvpro-portal-sdk ./srvpro-portal-sdk
+COPY srvpro-portal ./srvpro-portal
+COPY srvpro-api/package.json srvpro-api/build.mjs srvpro-api/tsconfig.json ./srvpro-api/
+COPY srvpro-api/src ./srvpro-api/src
+RUN if [ "$WITH_API" = "true" ]; then \
+      npm run build --workspace srvpro-portal \
+      && npm run build --workspace srvpro-pages \
+      && mkdir -p out \
+      && cp -r srvpro-portal/dist/. out/ \
+      && cp -r srvpro-api/dist/. out/; \
+    else \
+      mkdir -p out; \
+    fi
 
 FROM messense/rust-musl-cross:x86_64-musl AS build
 
@@ -30,9 +42,9 @@ COPY srvpro-api ./srvpro-api
 COPY srvpro-app ./srvpro-app
 
 RUN if [ "$WITH_API" = "true" ]; then \
-      FEATURES=api,zip,card,forge,field; \
+      FEATURES=api,zip,card,forge,official; \
     else \
-      FEATURES=zip,card,forge,field; \
+      FEATURES=zip,card,forge,official; \
     fi \
     && cargo build --release --target x86_64-unknown-linux-musl -p srvpro-app --no-default-features --features "$FEATURES"
 
@@ -51,7 +63,7 @@ WORKDIR /srvpro
 ENV RUST_MIN_STACK=16777216 \
     SRVPRO_CONFIG_PATH=/srvpro/config
 COPY --from=compress /srvpro /srvpro
-COPY --from=portal /portal/dist ./portal
+COPY --from=portal /portal/out ./portal
 COPY srvpro/config ./config
 EXPOSE 7911
 EXPOSE 7922

@@ -9,9 +9,17 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::auth;
+use crate::portal::Icon;
 
 const PERMISSION: &str = "stop";
 const MESSAGE_KEY: &str = "stop_message";
+
+#[distributed_slice(crate::portal::PORTAL_GLOBAL_ICONS)]
+static ICON: Icon = Icon { 
+    plugin: srvpro::plugin::stop::NAME, 
+    order: 3, 
+    export: "Stop" 
+};
 
 #[derive(Deserialize)]
 struct StopQuery {

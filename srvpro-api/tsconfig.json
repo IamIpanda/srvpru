@@ -1,0 +1,4 @@
+{
+  "extends": "@srvpro/portal-sdk/tsconfig.json",
+  "include": ["src/**/*.tsx"]
+}

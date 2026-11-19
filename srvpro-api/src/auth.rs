@@ -38,6 +38,17 @@ use srvpro::configuration;
 #[distributed_slice(srvpro::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 
+#[distributed_slice(crate::portal::PORTAL_PAGES)]
+static PAGE: crate::portal::Page = crate::portal::Page { 
+    plugin: module_path!(), 
+    route: "/login", 
+    export: "Login", 
+    topbar: false
+};
+
+#[distributed_slice(crate::portal::PORTAL_BOOTSTRAPS)]
+static BOOTSTRAP: crate::portal::Bootstrap = crate::portal::Bootstrap { plugin: module_path!() };
+
 #[derive(Clone, Configuration)]
 #[config(sync, register_to = "srvpro::plugin::CONFIGURATIONS")]
 pub struct Configuration {

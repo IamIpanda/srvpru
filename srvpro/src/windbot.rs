@@ -11,7 +11,9 @@ use rand::seq::SliceRandom;
 use serde::Deserialize;
 use tokio::process::Command;
 use tokio::task::JoinHandle;
+use ygopro::duel::SendTarget;
 use ygopro_data::constants::Color;
+use ygopro_data::constants::Netplayer;
 use ygopro_data::constants::Rule;
 use ygopro_data::message::ctos;
 use ygopro_derive::Configuration;
@@ -122,6 +124,10 @@ pub async fn invite(configuration: &Configuration, room_name: &str, bot: &Bot) -
     }).await.map_err(|error| error.to_string())?
 }
 
+fn notify_invite_failed(room_sender: &futures::channel::mpsc::UnboundedSender<Request>) {
+    room_sender.unbounded_send(Request::Query(Box::new(|room: &Room, _: &Anymap| room.broadcast_message(Color::Red, "添加AI失败，可尝试输入 /ai 重新添加。")))).ok();
+}
+
 #[handler(srvpro::PluginEnabled)]
 #[register_to(crate::SRVPRO_GLOBAL_HANDLERS as GlobalHandler)]
 fn on_plugin_enabled(event: &srvpro::PluginEnabled) {
@@ -192,8 +198,16 @@ fn ai_room(config: &mut RoomConfiguration, part: &str) -> bool {
     if !part.eq_ignore_ascii_case("AI") { return false }
     let bot = PENDING_BOTS.write().remove(&config.name);
     config.hostinfo.rule = Rule::All;
-    config.hostinfo.lflist = u32::MAX;
+    config.hostinfo.lflist = 0;
     config.hostinfo.time_limit = 999;
+    config.srvpro_configuration.enable_plugins.remove(crate::plugin::reconnect::NAME);
+    config.ygopru_configuration.enable_plugin_with_configuration(
+        ygopro::plugin::terminate::NAME,
+        ygopro::plugin::terminate::Configuration {
+            terminate_when: SendTarget::Single(Netplayer::Player(0)),
+            terminate_when_match_end: true
+        }
+    );
     config.states.insert(AiRoom { bot });
     true
 }
@@ -213,10 +227,12 @@ fn on_join_game(room: &mut Room, states: &mut Anymap) {
     };
     let Some(configuration) = crate::configuration::get_configuration::<Configuration>() else { return };
     let room_name = room.name.clone();
+    let room_sender = room.request_sender.clone();
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(200)).await;
         if let Err(error) = invite(&configuration, &room_name, &bot).await {
             log::warn!("Failed to invite windbot to room {room_name}: {error}");
+            notify_invite_failed(&room_sender);
         }
     });
 }
@@ -225,6 +241,7 @@ fn on_join_game(room: &mut Room, states: &mut Anymap) {
 #[register_to(CHAT_COMMANDS as ChatCommandHandler with &'static str)]
 fn ai(room: &mut Room, _states: &mut Anymap, index: usize, args: &str) {
     let room_name = room.name.clone();
+    let room_sender = room.request_sender.clone();
     let Some(configuration) = crate::configuration::get_configuration::<Configuration>() else { return };
     let Some(player) = room.players.get_mut(index) else { return };
     if !player.states.get::<bool>().copied().unwrap_or(false) {
@@ -235,10 +252,10 @@ fn ai(room: &mut Room, _states: &mut Anymap, index: usize, args: &str) {
         player.send_message("找不到指定的 AI。", Color::Red);
         return;
     };
-    player.send_message(&format!("正在邀请 AI: {}", bot.name), Color::Babyblue);
     tokio::spawn(async move {
         if let Err(error) = invite(&configuration, &room_name, &bot).await {
             log::warn!("Failed to invite windbot to room {room_name}: {error}");
+            notify_invite_failed(&room_sender);
         }
     });
 }

@@ -24,7 +24,8 @@ pub mod config_manager {
 
         fn new() -> Self {
             let mut config_manager = ConfigManager { entries: HashMap::new() };
-            let config_path = std::env::var("SRVPRO_CONFIG_PATH").unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/config").to_string());
+            let config_path = std::env::var("SRVPRO_CONFIG_PATH")
+                .unwrap_or(format!("{}/config", option_env!("CARGO_MANIFEST_DIR").unwrap_or(".")));
             if let Ok(entries) = read_config_directory(Path::new(&config_path)) {
                 config_manager.entries.extend(entries);
             }
