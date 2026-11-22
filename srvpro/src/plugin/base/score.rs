@@ -10,10 +10,10 @@ use ygopro_derive::register_to;
 use crate::mode::TagFlag;
 use crate::mode::opponent;
 use crate::plugin::base::first_attack::FirstAttack;
+use crate::plugin::base::position::Host;
 use crate::plugin::register_dependencies;
 use crate::room::GM_HANDLERS;
 use crate::room::GameMessageHandler;
-use crate::room::Player;
 
 /// Name for activitating this module in the plugin system.
 pub static NAME: &'static str = module_path!();
@@ -30,8 +30,7 @@ pub struct Score {
 
 #[handler(gm::Win)]
 #[register_to(GM_HANDLERS as GameMessageHandler)]
-fn on_win(player: &mut Player, score: &mut Score, first_attack: &mut FirstAttack, tag: TagFlag, win: &gm::Win) {
-    if player.states.get::<bool>() != Some(&true) { return; }
+fn on_win(_: Host, score: &mut Score, first_attack: &mut FirstAttack, tag: TagFlag, win: &gm::Win) {
     let Some(first_attacker) = first_attack.first_attack.last() else { return };
     let winner = if win.winner == CorePlayer::FirstAttackPlayer {
         Some(*first_attacker)

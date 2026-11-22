@@ -4,6 +4,7 @@ use ygopro_derive::*;
 use ygopro_data::message::stoc;
 
 use crate::plugin::base::replays::Replays;
+use crate::plugin::register_dependencies;
 use crate::room::Room;
 use crate::room::ServerToClientHandler;
 use crate::room::STOC_HANDLERS;
@@ -11,6 +12,10 @@ use crate::room::STOC_HANDLERS;
 /// Name for activitating this module in the plugin system.
 #[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
+
+register_dependencies!(
+    crate::plugin::base::replays::NAME
+);
 
 #[after(stoc::Replay)]
 #[register_to(STOC_HANDLERS as ServerToClientHandler)]

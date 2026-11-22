@@ -18,6 +18,7 @@ use crate::mode::*;
 use crate::room::*;
 use crate::plugin::base::first_attack::FirstAttack;
 use crate::plugin::base::lp::Lp;
+use crate::plugin::base::position::Host;
 use crate::plugin::base::score::Score;
 use crate::plugin::base::stage::Stage;
 use crate::plugin::register_dependencies;
@@ -87,8 +88,7 @@ fn death_mode(config: &mut RoomConfiguration, part: &str) -> bool {
 
 #[handler(stoc::DuelStart)]
 #[register_to(STOC_HANDLERS as ServerToClientHandler)]
-fn on_duel_start(player: &mut Player, death: &mut Death, sender: Sender) {
-    if player.states.get::<bool>() != Some(&true) { return }
+fn on_duel_start(_: Host, death: &mut Death, sender: Sender) {
     if death.count_down.is_some() { return }
     let minutes = death.minutes as u64;
     death.count_down = Some(tokio::spawn(async move {
@@ -155,9 +155,7 @@ fn sudden_death_judge(room: &mut Room, death: &mut Death, lp: &Lp, first_attack:
 
 #[handler(gm::NewTurn)]
 #[register_to(GM_HANDLERS as GameMessageHandler)]
-fn on_new_turn(room: &mut Room, index: usize, death: &mut Death, lp: &mut Lp, first_attack: &mut FirstAttack, tag: TagFlag) {
-    let Some(player) = room.players.get(index) else { return };
-    if player.states.get::<bool>() != Some(&true) { return };
+fn on_new_turn(room: &mut Room, _: Host, death: &mut Death, lp: &mut Lp, first_attack: &mut FirstAttack, tag: TagFlag) {
     if death.remain_turns < 0 { return };
     if death.remain_turns > 0 { death.remain_turns -= 1; }
     if death.remain_turns == 0 {

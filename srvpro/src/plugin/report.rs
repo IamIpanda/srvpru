@@ -140,6 +140,7 @@ pub fn build_report(room: &Room, score: &Score, first_attack: &FirstAttack, star
     let mut players = Slab::new();
     for (_index, player) in room.players.iter() {
         let Some(netplayer) = player.states.get::<Netplayer>().copied() else { continue };
+        if !matches!(netplayer, Netplayer::Player(_)) { continue }
         let team = team_of(tag.0, netplayer);
         players.insert(ReportPlayer {
             pos: netplayer,

@@ -13,6 +13,8 @@ use ygopro_derive::Configuration;
 use ygopro_derive::handler;
 use ygopro_derive::register_to;
 
+use crate::plugin::base::position::Host;
+use crate::plugin::register_dependencies;
 use crate::room::GM_HANDLERS;
 use crate::room::GameMessageHandler;
 use crate::room::Room;
@@ -20,6 +22,10 @@ use crate::room::Room;
 /// Name for activitating this module in the plugin system.
 #[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
+
+register_dependencies!(
+    crate::plugin::base::position::NAME
+);
 
 #[derive(Clone, Configuration)]
 #[config(sync)]
@@ -42,14 +48,9 @@ impl FromStr for Dialogues {
 #[derive(Default)]
 struct ReadyTrap(bool);
 
-fn is_host(room: &Room, index: usize) -> bool {
-    room.players.get(index).and_then(|player: &crate::room::Player| player.states.get::<bool>().copied()).unwrap_or(false)
-}
-
 #[handler(gm::Summoning)]
 #[register_to(GM_HANDLERS as GameMessageHandler)]
-fn on_summoning(room: &mut Room, index: usize, summoning: &gm::Summoning, configuration: Configuration) {
-    if !is_host(room, index) { return }
+fn on_summoning(room: &mut Room, _: Host, summoning: &gm::Summoning, configuration: Configuration) {
     if let Some(dialogue) = random_dialogue(&configuration, summoning.code) {
         send_dialogue(room, &dialogue);
     }
@@ -57,8 +58,7 @@ fn on_summoning(room: &mut Room, index: usize, summoning: &gm::Summoning, config
 
 #[handler(gm::SpecialSummoning)]
 #[register_to(GM_HANDLERS as GameMessageHandler)]
-fn on_special_summoning(room: &mut Room, index: usize, special_summoning: &gm::SpecialSummoning, configuration: Configuration) {
-    if !is_host(room, index) { return }
+fn on_special_summoning(room: &mut Room, _: Host, special_summoning: &gm::SpecialSummoning, configuration: Configuration) {
     if let Some(dialogue) = random_dialogue(&configuration, special_summoning.code) {
         send_dialogue(room, &dialogue);
     }
@@ -66,8 +66,7 @@ fn on_special_summoning(room: &mut Room, index: usize, special_summoning: &gm::S
 
 #[handler(gm::Chaining)]
 #[register_to(GM_HANDLERS as GameMessageHandler)]
-fn on_chaining(room: &mut Room, index: usize, chaining: &gm::Chaining, configuration: Configuration) {
-    if !is_host(room, index) { return }
+fn on_chaining(room: &mut Room, index: usize, _: Host, chaining: &gm::Chaining, configuration: Configuration) {
     let dialogue = {
         let Some(player) = room.players.get_mut(index) else { return };
         let ready_trap = player.states.entry::<ReadyTrap>().or_default();

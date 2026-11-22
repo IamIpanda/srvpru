@@ -10,6 +10,7 @@ use ygopro_derive::after;
 use ygopro_derive::register_to;
 
 use crate::plugin::base::lp::Lp;
+use crate::plugin::base::position::Host;
 use crate::plugin::register_dependencies;
 use crate::room::GM_HANDLERS;
 use crate::room::GameMessageHandler;
@@ -20,7 +21,8 @@ use crate::room::Room;
 pub static NAME: &'static str = module_path!();
 
 register_dependencies!(
-    crate::plugin::base::lp::NAME
+    crate::plugin::base::lp::NAME,
+    crate::plugin::base::position::NAME
 );
 
 #[derive(Clone, Default)]
@@ -47,8 +49,7 @@ pub struct Configuration {
 
 #[after(gm::Damage)]
 #[register_to(GM_HANDLERS as GameMessageHandler)]
-fn on_damage(room: &mut Room, index: usize, lp: &mut Lp, damage: &gm::Damage, configuration: Configuration) {
-    if room.players.get(index).and_then(|player| player.states.get::<bool>()) != Some(&true) { return }
+fn on_damage(room: &mut Room, _: Host, lp: &mut Lp, damage: &gm::Damage, configuration: Configuration) {
     let Some(remaining) = lp.lp.get(damage.player as usize) else { return };
     if *remaining <= 0 || *remaining > 100 { return }
     room.broadcast_message(Color::Pink, &configuration.lp_low_message_when_damaged.0);
@@ -56,8 +57,7 @@ fn on_damage(room: &mut Room, index: usize, lp: &mut Lp, damage: &gm::Damage, co
 
 #[after(gm::PayLPCost)]
 #[register_to(GM_HANDLERS as GameMessageHandler)]
-fn on_pay_lp_cost(room: &mut Room, index: usize, lp: &mut Lp, pay_lp_cost: &gm::PayLPCost, configuration: Configuration) {
-    if room.players.get(index).and_then(|player| player.states.get::<bool>()) != Some(&true) { return }
+fn on_pay_lp_cost(room: &mut Room, _: Host, lp: &mut Lp, pay_lp_cost: &gm::PayLPCost, configuration: Configuration) {
     let Some(remaining) = lp.lp.get(pay_lp_cost.player as usize) else { return };
     if *remaining <= 0 || *remaining > 100 { return }
     room.broadcast_message(Color::Pink, &configuration.lp_low_message_when_paid_cost.0);

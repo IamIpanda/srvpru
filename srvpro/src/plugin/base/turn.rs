@@ -5,10 +5,10 @@ use ygopro_derive::Attachment;
 use ygopro_derive::handler;
 use ygopro_derive::register_to;
 
+use crate::plugin::base::position::Host;
 use crate::plugin::register_dependencies;
 use crate::room::GM_HANDLERS;
 use crate::room::GameMessageHandler;
-use crate::room::Player;
 
 /// Name for activitating this module in the plugin system.
 pub static NAME: &'static str = module_path!();
@@ -24,7 +24,6 @@ pub struct Turn {
 
 #[handler(gm::NewTurn)]
 #[register_to(GM_HANDLERS as GameMessageHandler)]
-fn on_new_turn(player: &mut Player, turn: &mut Turn) {
-    if player.states.get::<bool>() != Some(&true) { return }
+fn on_new_turn(_: Host, turn: &mut Turn) {
     turn.turn += 1;
 }
