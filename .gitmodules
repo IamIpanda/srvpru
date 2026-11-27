@@ -1,0 +1,4 @@
+[submodule "windbot"]
+	path = srvpro-windbot/windbot
+	url = https://github.com/jwyxym/windbot
+	branch = windbot-rs

@@ -19,6 +19,12 @@ jobs:
           submodules: true
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+      - name: Set up .NET for the embedded WindBot build
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: Install the NativeAOT toolchain
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
       - name: Inject versions and publish unpublished crates
         run: bash .github/scripts/publish_cargo.sh Cargo.toml publish
         env:

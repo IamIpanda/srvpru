@@ -1,6 +1,7 @@
 //! Hold the replay until the duel ends.
 
 use ygopro_derive::*;
+use ygopro_data::constants::Color;
 use ygopro_data::message::stoc;
 
 use crate::plugin::base::replays::Replays;
@@ -23,10 +24,11 @@ fn on_replay() -> &'static str {
     "cancel"
 }
 
-#[handler(stoc::DuelEnd)]
+#[before(stoc::DuelEnd)]
 #[register_to(STOC_HANDLERS as ServerToClientHandler)]
 fn on_duel_end(room: &mut Room, replays: &mut Replays) {
-    for replay in replays.replays.drain(..) {
+    for (index, replay) in replays.replays.drain(..).enumerate() {
+        room.broadcast_message(Color::System, &format!("正在发送第 {} 局录像", index + 1));
         room.broadcast(stoc::Message::Replay(Box::new(replay)));
     }
 }

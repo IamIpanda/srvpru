@@ -1,0 +1,29 @@
+[package]
+name = "srvpro-windbot"
+version = "0.1.0"
+edition.workspace = true
+license-file.workspace = true
+repository.workspace = true
+description = "WindBot bindings for the srvpro duel server."
+readme = "README.md"
+keywords = ["ygopro", "srvpro", "windbot"]
+
+[dependencies]
+anymap3 = { version = "1", default-features = false, features = ["hashbrown"] }
+hashbrown = "0.17"
+linkme = "0.3"
+log = "0.4"
+parking_lot = "0.12"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+
+ygopro = { version = "0", default-features = false }
+ygopro-data = { version = "0", features = ["hashbrown"] }
+ygopro-derive = "0"
+ygopro-handler = { version = "0", default-features = false }
+srvpro = { workspace = true, features = ["zip", "card", "forge", "official"] }
+
+[features]
+default = ["patch-archive"]
+patch-archive = []

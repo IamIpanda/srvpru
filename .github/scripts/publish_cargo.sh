@@ -212,6 +212,8 @@ if [[ "$dry_run" == "dry-run" ]]; then
 else
   cp "$output_target" "$manifest_path"
   if [[ "$dry_run" == "publish" ]]; then
+    windbot_source="$workspace_root/srvpro-windbot/windbot"
+    rm -rf "$windbot_source/Cargo.toml" "$windbot_source/Cargo.lock" "$windbot_source/rust" "$windbot_source/.cargo"
     prepare_upstream_suffixes
     publish_all
   fi

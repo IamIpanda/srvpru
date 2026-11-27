@@ -1,6 +1,6 @@
 [package]
 name = "srvpro-app"
-version = "0.1.0"
+version = "0.1.4"
 publish = false
 edition.workspace = true
 license-file.workspace = true
@@ -15,10 +15,12 @@ log = "0.4"
 
 srvpro.workspace = true
 srvpro-api = { workspace = true, optional = true }
+srvpro-windbot = { workspace = true, optional = true }
 
 [features]
 default = ["api", "zip", "card", "forge", "official"]
 api = ["dep:srvpro-api"]
+embedded-windbot = ["dep:srvpro-windbot"]
 embedded-portal = ["srvpro-api/embedded-portal"]
 zip = ["srvpro/zip"]
 card = ["srvpro/card"]

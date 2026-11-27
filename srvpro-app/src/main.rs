@@ -2,6 +2,8 @@
 // check https://github.com/dtolnay/linkme/issues/31
 #[cfg(feature = "api")]
 extern crate srvpro_api;
+#[cfg(feature = "embedded-windbot")]
+extern crate srvpro_windbot;
 
 #[tokio::main]
 async fn main() {

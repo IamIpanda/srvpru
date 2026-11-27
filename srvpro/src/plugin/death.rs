@@ -23,6 +23,7 @@ use crate::plugin::base::score::Score;
 use crate::plugin::base::stage::Stage;
 use crate::plugin::register_dependencies;
 
+/// Name for activitating this module in the plugin system.
 #[distributed_slice(crate::plugin::SRVPRO_DEFAULT_ENABLED_PLUGINS)]
 pub static NAME: &'static str = module_path!();
 

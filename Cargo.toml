@@ -1,5 +1,5 @@
 [workspace]
-members = ["srvpro", "srvpro-api", "srvpro-app"]
+members = ["srvpro", "srvpro-api", "srvpro-app", "srvpro-windbot"]
 resolver = "2"
 
 [workspace.package]
@@ -10,6 +10,7 @@ repository = "https://github.com/IamIpanda/srvpru"
 [workspace.dependencies]
 srvpro = { path = "./srvpro", default-features = false }
 srvpro-api = { path = "./srvpro-api" }
+srvpro-windbot = { path = "./srvpro-windbot" }
 
 [profile.release]
 lto = true

@@ -1,6 +1,7 @@
 //! Virtual passwords: everything after `$` is dropped from player and room names, so several
 //! passwords open the same room.
 
+use ygopro::player;
 use ygopro_data::message::ctos;
 use ygopro_derive::handler;
 use ygopro_derive::register_to;
@@ -33,4 +34,10 @@ fn on_player_info(player: &mut Player, player_info: &ctos::PlayerInfo) -> Option
 fn virtual_password(config: &mut RoomConfiguration) {
     let Some(index) = config.origin_name.find('$') else { return };
     config.name = config.origin_name[..index].to_string();
+}
+
+pub fn get_origin_name(player: &Player) -> Option<&str> {
+    player.states.get::<OriginName>()
+        .map(|o| o.0.as_str())
+        .or_else(|| player.states.get::<String>().map(String::as_str))
 }

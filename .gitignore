@@ -6,11 +6,16 @@ srvpro-portal/dist/
 srvpro-api/dist/
 portal/
 srvpro-portal-backup/
+srvpro-windbot/windbot/obj/
+srvpro-windbot/windbot/bin/
+srvpro-windbot/windbot/.git
+srvpro-windbot/windbot/.github/
 *.log
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
+*.pack
 .history/
 .vscode/
 cards.cdb

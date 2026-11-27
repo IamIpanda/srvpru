@@ -67,7 +67,8 @@ function room_row(room: Room): Row {
 
 function log_row(log: DuelLog): Row {
   const names = log.players.map((player) => player.real_name)
-  return { key: `log-${log.id}`, name: log.name, player_a: names[0] ?? '', player_b: names[1] ?? '', score: log.players.map((player) => player.score).join(':'), time: format_time(log.time), needpass: false, replay: log.id, duel_count: log.duel_count }
+  const team_b = log.players.length > 2 ? log.players[2] : log.players[1]
+  return { key: `log-${log.id}`, name: log.name, player_a: names[0] ?? '', player_b: names[1] ?? '', score: `${log.players[0]?.score ?? 0}:${team_b?.score ?? 0}`, time: format_time(log.time), needpass: false, replay: log.id, duel_count: log.duel_count }
 }
 
 async function read_manifest(): Promise<PortalManifest | null> {

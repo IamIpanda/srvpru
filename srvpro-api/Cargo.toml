@@ -1,6 +1,6 @@
 [package]
 name = "srvpro-api"
-version = "0.1.3"
+version = "0.1.4"
 edition.workspace = true
 license-file.workspace = true
 repository.workspace = true
@@ -12,11 +12,11 @@ categories = ["web-programming::http-server"]
 [dependencies]
 anymap3 = { version = "1", default-features = false, features = ["hashbrown"] }
 tokio = { version = "1", features = ["full"] }
-arc-swap = "1"
+tower = { version = "0.5", features = ["util"] }
 axum = { version = "0.8", features = ["ws"] }
+arc-swap = "1"
 base64 = "0.23"
 chrono = "0.4"
-tower = { version = "0.5", features = ["util"] }
 linkme = "0.3"
 futures = "0.3"
 hashbrown = "0.17"

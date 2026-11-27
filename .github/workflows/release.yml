@@ -75,9 +75,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up .NET for the embedded WindBot build
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install the NativeAOT toolchain
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
 
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
@@ -101,11 +112,14 @@ jobs:
 
       - name: Build release binary
         shell: bash
+        env:
+          RUSTFLAGS: ${{ runner.os == 'Windows' && '-C target-feature=+crt-static' || '' }}
+          MACOSX_DEPLOYMENT_TARGET: ${{ runner.os == 'macOS' && '12.0' || '' }}
         run: |
           if [ "${{ matrix.flavor }}" = "headless" ]; then
-            cargo build --release -p srvpro-app --no-default-features --features zip,card,forge,official
+            cargo build --release -p srvpro-app --no-default-features --features zip,card,forge,official,embedded-windbot
           else
-            cargo build --release -p srvpro-app --features embedded-portal
+            cargo build --release -p srvpro-app --features embedded-portal,embedded-windbot
           fi
 
       - name: Compress binaries with UPX

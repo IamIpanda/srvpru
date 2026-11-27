@@ -26,10 +26,29 @@ RUN if [ "$WITH_API" = "true" ]; then \
       mkdir -p out; \
     fi
 
+FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS windbot
+
+ARG PROXY
+ARG WITH_WINDBOT=false
+ENV http_proxy=$PROXY \
+    https_proxy=$PROXY \
+    HTTP_PROXY=$PROXY \
+    HTTPS_PROXY=$PROXY
+
+WORKDIR /windbot
+COPY srvpro-windbot/windbot/ ./
+RUN if [ "$WITH_WINDBOT" = "true" ]; then \
+      apk add --no-cache clang build-base lld zlib-dev \
+      && dotnet publish WindBot.csproj -c Release -r linux-musl-x64 -p:NativeLib=Static -o /out; \
+    else \
+      mkdir -p /out; \
+    fi
+
 FROM messense/rust-musl-cross:x86_64-musl AS build
 
 ARG PROXY
 ARG WITH_API=true
+ARG WITH_WINDBOT=false
 ENV http_proxy=$PROXY \
     https_proxy=$PROXY \
     HTTP_PROXY=$PROXY \
@@ -40,12 +59,13 @@ COPY Cargo.toml Cargo.lock ./
 COPY srvpro ./srvpro
 COPY srvpro-api ./srvpro-api
 COPY srvpro-app ./srvpro-app
+COPY srvpro-windbot ./srvpro-windbot
+COPY --from=windbot /out /windbot-native
 
-RUN if [ "$WITH_API" = "true" ]; then \
-      FEATURES=api,zip,card,forge,official; \
-    else \
-      FEATURES=zip,card,forge,official; \
-    fi \
+RUN FEATURES=zip,card,forge,official \
+    && if [ "$WITH_API" = "true" ]; then FEATURES="$FEATURES,api"; fi \
+    && if [ "$WITH_WINDBOT" = "true" ]; then FEATURES="$FEATURES,embedded-windbot"; fi \
+    && if [ "$WITH_WINDBOT" = "true" ]; then export WINDBOT_NATIVE_DIR=/windbot-native; fi \
     && cargo build --release --target x86_64-unknown-linux-musl -p srvpro-app --no-default-features --features "$FEATURES"
 
 FROM alpine:latest AS compress

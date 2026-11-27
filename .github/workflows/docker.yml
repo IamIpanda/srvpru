@@ -14,15 +14,19 @@ jobs:
         include:
           - name: With API and portal
             with_api: "true"
+            with_windbot: "true"
             suffix: ""
             alias: latest
           - name: Headless
             with_api: "false"
+            with_windbot: "false"
             suffix: "-headless"
             alias: headless
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Extract cargo version of the srvpro-app package
         id: version
@@ -46,6 +50,7 @@ jobs:
           push: true
           build-args: |
             WITH_API=${{ matrix.with_api }}
+            WITH_WINDBOT=${{ matrix.with_windbot }}
           tags: |
             iami/srvpru:${{ steps.version.outputs.version }}${{ matrix.suffix }}
             iami/srvpru:${{ matrix.alias }}
