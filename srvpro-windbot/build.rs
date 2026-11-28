@@ -13,6 +13,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-env-changed=WINDBOT_SOURCE_DIR");
     println!("cargo:rerun-if-env-changed=WINDBOT_DOTNET");
 
+    if env::var_os("DOCS_RS").is_some() {
+        return Ok(())
+    }
+
     let target: String = env::var("TARGET")?;
     let host: String = env::var("HOST")?;
     let rid: &str = match target.as_str() {
